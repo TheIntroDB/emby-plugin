@@ -996,7 +996,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
                         Dashboard.showLoadingMsg();
                         return ApiClient.ajax({
-                            type: 'DELETE',
+                            type: 'POST',
                             url: ApiClient.getUrl('TheIntroDB/Segments/Chapters'),
                             dataType: 'json',
                             contentType: 'application/json; charset=utf-8',

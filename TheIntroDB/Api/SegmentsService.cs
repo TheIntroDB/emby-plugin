@@ -23,7 +23,7 @@ namespace TheIntroDB.Api
             public long InternalId { get; set; }
         }
 
-        [Route("/TheIntroDB/Segments/Chapters", "DELETE", Summary = "Remove TheIntroDB chapters and segments for items")]
+        [Route("/TheIntroDB/Segments/Chapters", "POST", Summary = "Remove TheIntroDB chapters and segments for items")]
         public sealed class DeleteChaptersRequest : IReturn<DeleteChaptersResponse>
         {
             public List<string> ItemIds { get; set; }
@@ -66,7 +66,7 @@ namespace TheIntroDB.Api
             }
         }
 
-        public object Delete(DeleteChaptersRequest request)
+        public object Post(DeleteChaptersRequest request)
         {
             var response = new DeleteChaptersResponse();
 

@@ -3,8 +3,8 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>TheIntroDB</RootNamespace>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.7.3</AssemblyVersion>
+    <FileVersion>1.0.7.3</FileVersion>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <LangVersion>10.0</LangVersion>
   </PropertyGroup>
