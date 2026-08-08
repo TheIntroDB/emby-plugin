@@ -46,8 +46,21 @@ IMDb IDs work as a fallback but are less accurate for TV episodes. The plugin wi
 TheIntroDB plugin includes some configuration options to adjust and improve your experience.
 
 - **API Key**: You can enter your TheIntroDB API key to fetch your submissions even if they're still pending and prioritize yours in the averaging calculation.
-- **Segment Toggles**: (All enabled by default) You can disable each segment individually so they're not applied when fetching.
+- **Segment Toggles**: (Intro, Recap, Credits, and Preview — all enabled by default) You can disable each segment individually so they're not applied when fetching.
 - **Ignore Media That Already Has Segments**: (Enabled by default) Prevent refetching of media that already has segments. This is recommended for large libraries.
+
+## How Segments Appear in Emby
+
+TheIntroDB provides four segment types: **Intro**, **Recap**, **Credits**, and **Preview**. The plugin writes them as chapter markers, and how each one shows up depends on what Emby's clients are built to render:
+
+| Segment | What you'll see in Emby clients |
+|---|---|
+| **Intro** | Emby's native **"Skip Intro"** button appears while the intro is playing. |
+| **Credits** | Emby's **"Coming Up Next"** overlay appears at the credits start (for episodes that have a next episode), letting you jump straight to it. There is no literal "Skip Credits" button. |
+| **Recap** | A regular chapter (`Recap (TheIntroDB)` → `Recap End (TheIntroDB)`) you can jump to from the chapter list. Emby has no recap skip button. |
+| **Preview** | A regular chapter (`Preview (TheIntroDB)` → `Preview End (TheIntroDB)`) you can jump to from the chapter list. Emby has no preview skip button. |
+
+> **Why no skip button for recap and preview?** This is a limitation of Emby, not the plugin. Emby's player only renders skip UI for intro markers (`IntroStart`/`IntroEnd`) and credits markers (`CreditsStart`) — those marker types are hard-coded into Emby's client apps. There is no plugin API for adding buttons to the player UI, and no "recap" or "preview" marker type exists in Emby. Until Emby adds them, recap and preview segments are exposed as chapters for manual navigation.
 
 ## Troubleshooting
 
