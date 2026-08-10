@@ -85,5 +85,13 @@ namespace TheIntroDB.Configuration
         /// Gets or sets a value indicating whether to automatically fetch segments for newly added items and on playback start.
         /// </summary>
         public bool EnableOnDemandFetch { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets how often (in hours) the plugin checks items it has segments for
+        /// and restores TheIntroDB markers that Emby may have overwritten (e.g. when Emby
+        /// regenerates placeholder chapters for files without embedded chapters).
+        /// 0 disables the automatic repair pass.
+        /// </summary>
+        public int MarkerRepairIntervalHours { get; set; } = 12;
     }
 }

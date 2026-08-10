@@ -68,6 +68,10 @@ It's recommended to disable Emby's internal intro marker detection in **Dashboar
 
 ![Disable Intro Markers](images/disable-intro-markers.png)
 
+**Files without embedded chapters:** Emby can overwrite TheIntroDB markers on files that contain no embedded chapters. By default Emby generates placeholder chapters (~every 5 minutes) for such files during library scans, and that write replaces the whole chapter list — including TheIntroDB markers. Files with embedded chapters are unaffected because Emby skips generation for them. To prevent the overwrite entirely, uncheck **"Generate chapters for videos that don't contain embedded chapter information"** in the same library settings.
+
+As a safety net, the plugin automatically restores markers it has stored whenever they go missing (see **Marker repair interval** in the plugin settings, default every 12 hours), so markers recover on their own even if Emby overwrites them.
+
 Thumbnail extraction is also recommended and can be done from **Dashboard → Library → select library → Advanced/options → Enable "Video preview thumbnails"**.
 
 ![Enable Video Preview Thumbnails](images/video-preview-thumbnails.png)

@@ -52,6 +52,11 @@ namespace TheIntroDB.EntryPoints
         {
             _libraryManager.ItemUpdated += LibraryManager_ItemUpdated;
             _libraryManager.ItemAdded += LibraryManager_ItemAdded;
+
+            // Background marker-repair pass: restores TheIntroDB markers that Emby
+            // may have overwritten (e.g. placeholder chapters regenerated for files
+            // without embedded chapters). Runs on a configurable interval.
+            _ = TrackTaskAsync(RunMarkerRepairLoopAsync(_cts.Token));
         }
 
         public void Dispose()
@@ -127,12 +132,17 @@ namespace TheIntroDB.EntryPoints
             }
         }
 
-        private void EnsureMarkersApplied(BaseItem item, PluginConfiguration config)
+        /// <summary>
+        /// Ensures TheIntroDB markers are applied for an item. Returns true when
+        /// markers were (re)written, false when nothing was needed or the item
+        /// was skipped (already processing, no segments, or markers present).
+        /// </summary>
+        private bool EnsureMarkersApplied(BaseItem item, PluginConfiguration config)
         {
             var internalId = item.InternalId;
             if (!_writesInProgress.TryAdd(internalId, 0))
             {
-                return;
+                return false;
             }
 
             try
@@ -140,25 +150,131 @@ namespace TheIntroDB.EntryPoints
                 var segments = _segmentRepository.GetSegments(internalId);
                 if (segments == null || segments.Count == 0)
                 {
-                    return;
+                    return false;
                 }
 
                 var existingChapters = _itemRepository.GetChapters(item) ?? new List<ChapterInfo>();
                 if (!NeedsMarkerApply(existingChapters, config))
                 {
-                    return;
+                    return false;
                 }
 
                 _chapterWriter.ApplyMarkers(item, segments, config);
+                return true;
             }
             catch (Exception ex)
             {
                 _logger.Error("TheIntroDB chapter marker persistence exception: " + ex.Message);
+                return false;
             }
             finally
             {
                 _writesInProgress.TryRemove(internalId, out _);
             }
+        }
+
+        /// <summary>
+        /// Periodic repair loop: every MarkerRepairIntervalHours, scans items that
+        /// have stored segments and restores markers that Emby may have overwritten
+        /// (e.g. when Emby regenerates placeholder chapters for files without
+        /// embedded chapters). Only touches items whose markers are missing, so it
+        /// is cheap for healthy libraries.
+        /// </summary>
+        private async Task RunMarkerRepairLoopAsync(CancellationToken cancellationToken)
+        {
+            var intervalHours = Plugin.Instance?.Configuration?.MarkerRepairIntervalHours ?? 0;
+            if (intervalHours <= 0)
+            {
+                _logger.Debug("TheIntroDB marker repair disabled (MarkerRepairIntervalHours=0), not starting loop");
+                return;
+            }
+
+            try
+            {
+                // Give Emby a moment to settle after plugin load so the first
+                // pass doesn't race an in-progress library scan.
+                await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    var config = Plugin.Instance?.Configuration;
+                    if (config != null && config.MarkerRepairIntervalHours > 0)
+                    {
+                        await RepairWipedMarkersAsync(config, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("TheIntroDB marker repair pass failed: " + ex.Message);
+                }
+
+                intervalHours = Plugin.Instance?.Configuration?.MarkerRepairIntervalHours ?? 0;
+                if (intervalHours <= 0)
+                {
+                    _logger.Debug("TheIntroDB marker repair disabled (MarkerRepairIntervalHours=0), stopping loop");
+                    return;
+                }
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromHours(intervalHours), cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
+        }
+
+        private async Task RepairWipedMarkersAsync(PluginConfiguration config, CancellationToken cancellationToken)
+        {
+            var segmentedIds = new HashSet<long>(_segmentRepository.GetAllSegmentedItemIds());
+            if (segmentedIds.Count == 0)
+            {
+                _logger.Debug("TheIntroDB marker repair: no items with stored segments, skipping");
+                return;
+            }
+
+            var items = _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Movie", "Episode" },
+                Recursive = true
+            }) ?? Array.Empty<BaseItem>();
+
+            var repaired = 0;
+            var checkedItems = 0;
+
+            foreach (var item in items)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                if (item == null || !segmentedIds.Contains(item.InternalId))
+                {
+                    continue;
+                }
+
+                checkedItems++;
+                if (EnsureMarkersApplied(item, config))
+                {
+                    repaired++;
+                }
+            }
+
+            _logger.Info("TheIntroDB marker repair pass complete: {0}/{1} segmented items needed marker restoration", repaired, checkedItems);
         }
 
         private static bool NeedsMarkerApply(IReadOnlyList<ChapterInfo> chapters, PluginConfiguration config)

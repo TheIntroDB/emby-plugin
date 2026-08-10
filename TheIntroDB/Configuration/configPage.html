@@ -95,6 +95,20 @@
             </div>
 
             <div class="verticalSection">
+                <h3 class="sectionTitle">Maintenance</h3>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="MarkerRepairIntervalHours">Marker repair interval (hours)</label>
+                    <input id="MarkerRepairIntervalHours" name="MarkerRepairIntervalHours" type="number" min="0" step="1" is="emby-input" autocomplete="off" />
+                    <div class="fieldDescription">How often the plugin checks items it has segments for and restores TheIntroDB markers that Emby may have overwritten (e.g. when Emby regenerates placeholder chapters for files without embedded chapters). Set to 0 to disable automatic repair.</div>
+                </div>
+                <p class="fieldDescription">
+                    Tip: Emby's library setting "Generate chapters for videos that don't contain embedded chapter information"
+                    (Dashboard &rarr; Libraries &rarr; edit a library) can overwrite TheIntroDB markers on files without embedded chapters.
+                    Disabling it there prevents the overwrite entirely.
+                </p>
+            </div>
+
+            <div class="verticalSection">
                 <h3 class="sectionTitle">Debug</h3>
                 <div class="inputContainer">
                     <label class="inputLabel inputLabelUnfocused" for="DebugInternalId">Item InternalId</label>

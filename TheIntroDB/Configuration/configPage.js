@@ -958,6 +958,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                                 page.querySelector('#EnableOnDemandFetch').checked = config.EnableOnDemandFetch !== false;
                                 page.querySelector('#EnableAnonymousUsageReporting').checked = config.EnableAnonymousUsageReporting !== false;
                                 page.querySelector('#EnableFileLogging').checked = config.EnableFileLogging === true;
+                                page.querySelector('#MarkerRepairIntervalHours').value = config.MarkerRepairIntervalHours != null ? config.MarkerRepairIntervalHours : 12;
                                 if (apiKeyInput.value) {
                                     return validateApiKey(apiKeyInput.value, true);
                                 }
@@ -1087,6 +1088,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                             config.EnableOnDemandFetch = page.querySelector('#EnableOnDemandFetch').checked;
                             config.EnableAnonymousUsageReporting = page.querySelector('#EnableAnonymousUsageReporting').checked;
                             config.EnableFileLogging = page.querySelector('#EnableFileLogging').checked;
+                            config.MarkerRepairIntervalHours = parseInt(page.querySelector('#MarkerRepairIntervalHours').value || '0', 10) || 0;
                             return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
                                 Dashboard.processPluginConfigurationUpdateResult(result);
                             });
