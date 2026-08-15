@@ -15,8 +15,6 @@ namespace TheIntroDB.Services
         private readonly IItemRepository _itemRepository;
         private readonly ILogger _logger;
 
-        private
-        const string TheIntroDbTag = " (TheIntroDB)";
 
         public TheIntroDbChapterMarkerWriter(IItemRepository itemRepository,
           ILogger logger)
@@ -26,7 +24,7 @@ namespace TheIntroDB.Services
         }
 
         public int ApplyMarkers(BaseItem item, IReadOnlyList<StoredMediaSegment>
-          segments, PluginConfiguration config)
+          segments, PluginConfiguration config, bool preview = false)
         {
             if (item == null || segments == null || segments.Count == 0 ||
               config == null)
@@ -39,7 +37,16 @@ namespace TheIntroDB.Services
             var chapters = new List<ChapterInfo>(existing.Count + segments.Count * 2);
             chapters.AddRange(existing);
 
-            RemoveExistingTheIntroDbMarkers(chapters);
+            var protectIntro = config.ProtectExistingIntroMarkers &&
+                ChapterMarkerPolicy.HasNativeIntroMarker(existing);
+            var protectCredits = config.ProtectExistingCreditsMarkers &&
+                ChapterMarkerPolicy.HasNativeCreditsMarker(existing);
+
+            ChapterMarkerPolicy.RemoveOwnedMarkers(chapters,
+                config.EnableIntro && !protectIntro,
+                config.EnableCredits && !protectCredits,
+                config.EnableRecap,
+                config.EnablePreview);
 
             var added = 0;
             var durationTicks = item.RunTimeTicks.HasValue &&
@@ -74,7 +81,7 @@ namespace TheIntroDB.Services
                 switch (s.Type)
                 {
                     case MediaSegmentType.Intro:
-                        if (config.EnableIntro)
+                        if (config.EnableIntro && !protectIntro)
                         {
                             added += AddIntroMarkers(chapters, normalized);
                         }
@@ -87,7 +94,7 @@ namespace TheIntroDB.Services
                         }
                         break;
                     case MediaSegmentType.Credits:
-                        if (config.EnableCredits)
+                        if (config.EnableCredits && !protectCredits)
                         {
                             added += AddCreditsMarkers(chapters, normalized);
                         }
@@ -113,6 +120,13 @@ namespace TheIntroDB.Services
                 return 0;
             }
 
+            if (preview)
+            {
+                _logger.Debug("TheIntroDB preview would save {0} chapters/markers for {1} ({2})",
+                    deduped.Count, item.Name, item.InternalId);
+                return added;
+            }
+
             _itemRepository.SaveChapters(item.InternalId, deduped);
             _logger.Debug("TheIntroDB saved {0} chapters/markers for {1} ({2})",
               deduped.Count, item.Name, item.InternalId);
@@ -129,14 +143,14 @@ namespace TheIntroDB.Services
             added += AddIfMissing(chapters, MarkerType.IntroStart,
               s.StartTicks, "Intro");
             added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.StartTicks, "Intro" + TheIntroDbTag);
+              s.StartTicks, "Intro" + ChapterMarkerPolicy.TheIntroDbTag);
 
             // Always add end marker — even if it equals start
             // (e.g. point-like intro at 0:00)
             added += AddIfMissing(chapters, MarkerType.IntroEnd, s.EndTicks,
               "Intro End");
             added += AddIfMissing(chapters, MarkerType.Chapter, s.EndTicks,
-              "Intro End" + TheIntroDbTag);
+              "Intro End" + ChapterMarkerPolicy.TheIntroDbTag);
 
             return added;
         }
@@ -150,11 +164,11 @@ namespace TheIntroDB.Services
             added += AddIfMissing(chapters, MarkerType.CreditsStart,
               s.StartTicks, "Credits");
             added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.StartTicks, "Credits" + TheIntroDbTag);
+              s.StartTicks, "Credits" + ChapterMarkerPolicy.TheIntroDbTag);
 
             // End marker at media duration — credits extend to the end
             added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.EndTicks, "Credits End" + TheIntroDbTag);
+              s.EndTicks, "Credits End" + ChapterMarkerPolicy.TheIntroDbTag);
 
             return added;
         }
@@ -166,11 +180,11 @@ namespace TheIntroDB.Services
 
             // Always add start marker — even at 0:00
             added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.StartTicks, startName + TheIntroDbTag);
+              s.StartTicks, startName + ChapterMarkerPolicy.TheIntroDbTag);
 
             // Always add end marker — even if it equals start
             added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.EndTicks, endName + TheIntroDbTag);
+              s.EndTicks, endName + ChapterMarkerPolicy.TheIntroDbTag);
 
             return added;
         }
@@ -194,30 +208,6 @@ namespace TheIntroDB.Services
             return 1;
         }
 
-        private static void RemoveExistingTheIntroDbMarkers(
-          List<ChapterInfo> chapters)
-        {
-            if (chapters == null || chapters.Count == 0)
-            {
-                return;
-            }
-
-            chapters.RemoveAll(c =>
-              (c.MarkerType == MarkerType.IntroStart &&
-                string.Equals(c.Name, "Intro", StringComparison.Ordinal)) ||
-              (c.MarkerType == MarkerType.IntroEnd &&
-                string.Equals(c.Name, "Intro End", StringComparison.Ordinal)) ||
-              (c.MarkerType == MarkerType.CreditsStart &&
-                string.Equals(c.Name, "Credits", StringComparison.Ordinal)) ||
-              (c.MarkerType == MarkerType.Chapter && c.Name != null &&
-                c.Name.EndsWith(TheIntroDbTag, StringComparison.Ordinal)) ||
-              string.Equals(c.Name, "IntroStartMarker",
-                StringComparison.Ordinal) ||
-              string.Equals(c.Name, "IntroEndMarker",
-                StringComparison.Ordinal) ||
-              string.Equals(c.Name, "CreditsStartMarker",
-                StringComparison.Ordinal));
-        }
 
         private static long ClampTicks(long ticks, long? durationTicks)
         {

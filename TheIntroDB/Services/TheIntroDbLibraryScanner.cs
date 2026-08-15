@@ -56,7 +56,8 @@ namespace TheIntroDB.Services
         /// <returns>Total number of segments found.</returns>
         public async Task<int> ScanLibraryAsync(
           Action<string, int, int> progress,
-          CancellationToken cancellationToken)
+          CancellationToken cancellationToken,
+          bool preview = false)
         {
             _logger.Info("Starting library scan for TheIntroDB segments");
 
@@ -109,6 +110,7 @@ namespace TheIntroDB.Services
             var processed = 0;
             var total = itemsToScan.Length;
             var consecutiveApiFailures = 0;
+            var lookupBudget = new ScanLookupBudget(config.MaxLookupsPerRun);
 
             for (var i = 0; i < itemsToScan.Length; i++)
             {
@@ -130,10 +132,24 @@ namespace TheIntroDB.Services
                         continue;
                     }
 
+                    if (!lookupBudget.TryBeginLookup())
+                    {
+                        _logger.Info("TheIntroDB scan stopped at the configured lookup limit of {0}",
+                            config.MaxLookupsPerRun);
+                        break;
+                    }
+
                     var result = await _segmentProvider.GetMediaSegmentsAsync(
                       item.Id, cancellationToken).ConfigureAwait(false);
 
-                    if (result.IsRateLimited || result.IsError)
+                    if (result.IsRateLimited)
+                    {
+                        lookupBudget.StopAfterRateLimit();
+                        _logger.Warn("TheIntroDB scan stopped after HTTP 429. No further lookups will run in this task.");
+                        break;
+                    }
+
+                    if (result.IsError)
                     {
                         consecutiveApiFailures++;
                         if (consecutiveApiFailures >= MaxConsecutiveApiFailures)
@@ -157,17 +173,22 @@ namespace TheIntroDB.Services
                         EndTicks = s.EndTicks
                     }).ToList();
 
-                    _repository.ReplaceSegments(item.InternalId,
-                      storedSegments, DateTime.UtcNow);
+                    if (!preview)
+                    {
+                        _repository.ReplaceSegments(item.InternalId,
+                          storedSegments, DateTime.UtcNow);
+                    }
 
                     var inserted = _chapterMarkerWriter.ApplyMarkers(
-                      item, storedSegments, config);
+                      item, storedSegments, config, preview);
 
                     totalSegments += storedSegments.Count;
                     processed++;
 
                     progress?.Invoke(string.Format(
-                        "Processed {0}: {1} segments (fetched), {2} markers added",
+                        preview
+                            ? "Previewed {0}: {1} segments fetched, {2} markers would be added"
+                            : "Processed {0}: {1} segments fetched, {2} markers added",
                         item.Name, storedSegments.Count, inserted),
                       processed, total);
                 }
@@ -187,9 +208,9 @@ namespace TheIntroDB.Services
                 }
             }
 
-            _logger.Info("Library scan completed. Found {0} total segments ({1} cached + {2} newly scanned) in {3} items",
+            _logger.Info("Library scan completed. Found {0} total segments ({1} cached + {2} newly scanned) in {3} items with {4} lookups. Preview={5}",
                 totalSegments, cachedSegmentCount, totalSegments - cachedSegmentCount,
-                cachedSegmentCount + processed);
+                cachedSegmentCount + processed, lookupBudget.Used, preview);
             return totalSegments;
         }
 
