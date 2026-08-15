@@ -10,7 +10,7 @@ using TheIntroDB.Models;
 
 namespace TheIntroDB.Data
 {
-    public sealed class TheIntroDbSegmentRepository : IDisposable
+    public sealed class TheIntroDbSegmentRepository : ITheIntroDbSegmentRepository, IDisposable
     {
         private readonly ILogger _logger;
         private readonly ReaderWriterLockSlim _lock;

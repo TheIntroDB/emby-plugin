@@ -138,8 +138,8 @@ namespace TheIntroDB.Api
                                 var retryAfterSeconds = GetRetryAfterSeconds(response.Headers);
                                 Plugin.RateLimitExpiryUtc = DateTime.UtcNow.AddSeconds(retryAfterSeconds);
                                 _logger.Warn(
-                                    "TheIntroDB API rate limit exceeded. Retry-after: {0}s (attempt {1}/{2})",
-                                    retryAfterSeconds, attempt + 1, maxRetries);
+                                    "TheIntroDB API rate limit exceeded. Retry-after: {0}s. No retry will be attempted.",
+                                    retryAfterSeconds);
 
                                 Plugin.TrackAnonymousUsageEvent(
                                     "theintrodb_api_media_fetch",
@@ -153,14 +153,6 @@ namespace TheIntroDB.Api
                                         ["has_imdb"] = hasImdb ? 1 : 0,
                                         ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                                     });
-
-                                if (attempt < maxRetries - 1)
-                                {
-                                    var retryDelay = TimeSpan.FromSeconds(retryAfterSeconds);
-                                    _logger.Info("TheIntroDB API retrying after rate limit in {0}s...", retryAfterSeconds);
-                                    await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
-                                    continue;
-                                }
 
                                 return MediaFetchResult.RateLimited();
                             }

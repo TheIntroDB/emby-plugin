@@ -42,12 +42,6 @@ namespace TheIntroDB.Services
             var protectCredits = config.ProtectExistingCreditsMarkers &&
                 ChapterMarkerPolicy.HasNativeCreditsMarker(existing);
 
-            ChapterMarkerPolicy.RemoveOwnedMarkers(chapters,
-                config.EnableIntro && !protectIntro,
-                config.EnableCredits && !protectCredits,
-                config.EnableRecap,
-                config.EnablePreview);
-
             var added = 0;
             var durationTicks = item.RunTimeTicks.HasValue &&
               item.RunTimeTicks.Value > 0 ? item.RunTimeTicks.Value : (long?)null;

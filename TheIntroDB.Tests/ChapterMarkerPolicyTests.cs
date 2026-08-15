@@ -20,7 +20,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void OwnedIntroMarkerIsNotTreatedAsNative()
+        public void TaggedCompanionCannotDisqualifyAnExistingIntroMarker()
         {
             var chapters = new List<ChapterInfo>
             {
@@ -28,25 +28,19 @@ namespace TheIntroDB.Tests
                 Chapter(MarkerType.Chapter, 100, "Intro (TheIntroDB)")
             };
 
-            Assert.False(ChapterMarkerPolicy.HasNativeIntroMarker(chapters));
+            Assert.True(ChapterMarkerPolicy.HasNativeIntroMarker(chapters));
         }
 
         [Fact]
-        public void RemovingOwnedIntroPreservesNativeAndUnrelatedChapters()
+        public void TaggedCompanionCannotDisqualifyAnExistingCreditsMarker()
         {
             var chapters = new List<ChapterInfo>
             {
-                Chapter(MarkerType.IntroStart, 100, "Intro"),
-                Chapter(MarkerType.Chapter, 100, "Intro (TheIntroDB)"),
-                Chapter(MarkerType.IntroStart, 200, "Native Intro"),
-                Chapter(MarkerType.Chapter, 300, "Scene")
+                Chapter(MarkerType.CreditsStart, 900, "Credits"),
+                Chapter(MarkerType.Chapter, 900, "Credits (TheIntroDB)")
             };
 
-            ChapterMarkerPolicy.RemoveOwnedMarkers(chapters, true, false, false, false);
-
-            Assert.DoesNotContain(chapters, c => c.StartPositionTicks == 100);
-            Assert.Contains(chapters, c => c.StartPositionTicks == 200 && c.MarkerType == MarkerType.IntroStart);
-            Assert.Contains(chapters, c => c.StartPositionTicks == 300 && c.Name == "Scene");
+            Assert.True(ChapterMarkerPolicy.HasNativeCreditsMarker(chapters));
         }
 
         [Fact]

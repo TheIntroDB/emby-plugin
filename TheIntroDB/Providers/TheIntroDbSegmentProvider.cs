@@ -48,10 +48,12 @@ namespace TheIntroDB.Providers
         /// </summary>
         /// <param name="itemId">The item ID to fetch segments for.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
+        /// <param name="initializeConfiguration">Whether configuration migration may persist changes.</param>
         /// <returns>Fetch result with segment data or empty if not found.</returns>
         public async Task<SegmentFetchResult> GetMediaSegmentsAsync(
           Guid itemId,
-          CancellationToken cancellationToken)
+          CancellationToken cancellationToken,
+          bool initializeConfiguration = true)
         {
             _logger.Info("GetMediaSegmentsAsync called for ItemId={0}", itemId);
 
@@ -61,7 +63,10 @@ namespace TheIntroDB.Providers
                 return SegmentFetchResult.NotFound();
             }
 
-            Plugin.Instance.EnsureConfigurationInitialized();
+            if (initializeConfiguration)
+            {
+                Plugin.Instance.EnsureConfigurationInitialized();
+            }
 
             var config = Plugin.Instance.Configuration;
             if (config is null)

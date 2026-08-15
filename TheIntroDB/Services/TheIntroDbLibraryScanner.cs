@@ -25,7 +25,7 @@ namespace TheIntroDB.Services
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
         private readonly TheIntroDbSegmentProvider _segmentProvider;
-        private readonly TheIntroDbSegmentRepository _repository;
+        private readonly ITheIntroDbSegmentRepository _repository;
         private readonly TheIntroDbChapterMarkerWriter _chapterMarkerWriter;
 
         /// <summary>
@@ -37,7 +37,7 @@ namespace TheIntroDB.Services
         public TheIntroDbLibraryScanner(
           ILibraryManager libraryManager,
           TheIntroDbSegmentProvider segmentProvider,
-          TheIntroDbSegmentRepository repository,
+          ITheIntroDbSegmentRepository repository,
           TheIntroDbChapterMarkerWriter chapterMarkerWriter,
           ILogger logger)
         {
@@ -68,7 +68,10 @@ namespace TheIntroDB.Services
                 return 0;
             }
 
-            plugin.EnsureConfigurationInitialized();
+            if (!preview)
+            {
+                plugin.EnsureConfigurationInitialized();
+            }
 
             var config = plugin.Configuration;
             var requestedTypes = GetRequestedTypes(config);
@@ -123,7 +126,10 @@ namespace TheIntroDB.Services
 
                 try
                 {
-                    plugin.EnsureConfigurationInitialized();
+                    if (!preview)
+                    {
+                        plugin.EnsureConfigurationInitialized();
+                    }
                     config = plugin.Configuration;
                     requestedTypes = GetRequestedTypes(config);
                     if (requestedTypes.Count == 0)
@@ -140,7 +146,7 @@ namespace TheIntroDB.Services
                     }
 
                     var result = await _segmentProvider.GetMediaSegmentsAsync(
-                      item.Id, cancellationToken).ConfigureAwait(false);
+                      item.Id, cancellationToken, !preview).ConfigureAwait(false);
 
                     if (result.IsRateLimited)
                     {
