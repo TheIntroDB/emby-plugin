@@ -312,15 +312,11 @@ namespace TheIntroDB.EntryPoints
 
                 if (!hasRecap)
                 {
-                    if (string.Equals(c.Name, "Recap", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Recap End", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Recap (TheIntroDB)", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Recap End (TheIntroDB)", StringComparison.Ordinal) ||
-                        (IsDurablyOwnedChapter(c, ownedChapters) &&
-                            (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap") ||
-                             ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End") ||
-                             ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap" + ChapterMarkerPolicy.TheIntroDbTag) ||
-                             ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End" + ChapterMarkerPolicy.TheIntroDbTag))))
+                    if (IsDurablyOwnedChapter(c, ownedChapters) &&
+                        (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap") ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End") ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap" + ChapterMarkerPolicy.TheIntroDbTag) ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End" + ChapterMarkerPolicy.TheIntroDbTag)))
                     {
                         hasRecap = true;
                     }
@@ -328,15 +324,11 @@ namespace TheIntroDB.EntryPoints
 
                 if (!hasPreview)
                 {
-                    if (string.Equals(c.Name, "Preview", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Preview End", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Preview (TheIntroDB)", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Preview End (TheIntroDB)", StringComparison.Ordinal) ||
-                        (IsDurablyOwnedChapter(c, ownedChapters) &&
-                            (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview") ||
-                             ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End") ||
-                             ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview" + ChapterMarkerPolicy.TheIntroDbTag) ||
-                             ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End" + ChapterMarkerPolicy.TheIntroDbTag))))
+                    if (IsDurablyOwnedChapter(c, ownedChapters) &&
+                        (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview") ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End") ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview" + ChapterMarkerPolicy.TheIntroDbTag) ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End" + ChapterMarkerPolicy.TheIntroDbTag)))
                     {
                         hasPreview = true;
                     }

@@ -421,10 +421,13 @@ namespace TheIntroDB.Tests
                 BindingFlags.Static | BindingFlags.NonPublic);
 
             Assert.NotNull(method);
+            var legacyChapter = Chapter(MarkerType.Chapter, 42L, "Recap (TheIntroDB)");
             var ownedResult = (bool?)method.Invoke(null, new object[] { new[] { chapter }, new[] { owned }, config });
             var unownedResult = (bool?)method.Invoke(null, new object[] { new[] { chapter }, Array.Empty<OwnedChapterMarker>(), config });
+            var legacyResult = (bool?)method.Invoke(null, new object[] { new[] { legacyChapter }, Array.Empty<OwnedChapterMarker>(), config });
             Assert.False(ownedResult.GetValueOrDefault(true));
             Assert.True(unownedResult.GetValueOrDefault(false));
+            Assert.True(legacyResult.GetValueOrDefault(false));
         }
 
         private static ChapterInfo Chapter(MarkerType markerType, long ticks, string name)
