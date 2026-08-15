@@ -65,6 +65,19 @@ namespace TheIntroDB.Tests
             Assert.False(config.EnableOnDemandFetch);
             Assert.False(config.EnableAnonymousUsageReporting);
             Assert.False(config.EnablePreview);
+            Assert.False(config.ReplaceExistingMarkers);
+        }
+
+        [Fact]
+        public void OwnershipTokenMustMatchExactly()
+        {
+            const string token = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+            var name = ChapterMarkerPolicy.AddOwnershipToken("Intro", token);
+
+            Assert.True(ChapterMarkerPolicy.HasOwnershipToken(name, token));
+            Assert.True(ChapterMarkerPolicy.HasOwnedLabel(name, "Intro"));
+            Assert.False(ChapterMarkerPolicy.HasOwnershipToken(name, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+            Assert.False(ChapterMarkerPolicy.HasOwnershipToken("Intro (TheIntroDB)", token));
         }
 
         private static ChapterInfo Chapter(MarkerType markerType, long ticks, string name)

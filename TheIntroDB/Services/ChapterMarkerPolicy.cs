@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using MediaBrowser.Model.Entities;
@@ -7,6 +8,34 @@ namespace TheIntroDB.Services
     public static class ChapterMarkerPolicy
     {
         public const string TheIntroDbTag = " (TheIntroDB)";
+        private const string OwnershipPrefix = " [TheIntroDB:";
+        private const string OwnershipSuffix = "]";
+
+        public static string AddOwnershipToken(string name, string ownerToken)
+        {
+            if (string.IsNullOrWhiteSpace(ownerToken))
+            {
+                throw new ArgumentException("Ownership token is required.", nameof(ownerToken));
+            }
+
+            return (name ?? string.Empty) + OwnershipPrefix + ownerToken + OwnershipSuffix;
+        }
+
+        public static bool HasOwnershipToken(string name, string ownerToken)
+        {
+            return !string.IsNullOrWhiteSpace(ownerToken) &&
+                !string.IsNullOrEmpty(name) &&
+                name.EndsWith(OwnershipPrefix + ownerToken + OwnershipSuffix, StringComparison.Ordinal);
+        }
+
+        public static bool HasOwnedLabel(string name, string label)
+        {
+            var prefix = (label ?? string.Empty) + OwnershipPrefix;
+            return !string.IsNullOrEmpty(name) &&
+                name.Length > prefix.Length + OwnershipSuffix.Length &&
+                name.StartsWith(prefix, StringComparison.Ordinal) &&
+                name.EndsWith(OwnershipSuffix, StringComparison.Ordinal);
+        }
 
         public static bool HasNativeIntroMarker(IReadOnlyCollection<ChapterInfo> chapters)
         {

@@ -40,7 +40,8 @@ namespace TheIntroDB.Api
             int? season,
             int? episode,
             long? durationMs,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool trackUsage = true)
         {
             if (DateTime.UtcNow < Plugin.RateLimitExpiryUtc)
             {
@@ -69,7 +70,7 @@ namespace TheIntroDB.Api
                 return MediaFetchResult.NotFound();
             }
 
-            Plugin.TrackAnonymousUsageEvent(
+            TrackUsage(trackUsage,
                 "theintrodb_api_media_fetch",
                 new Dictionary<string, object>
                 {
@@ -141,7 +142,7 @@ namespace TheIntroDB.Api
                                     "TheIntroDB API rate limit exceeded. Retry-after: {0}s. No retry will be attempted.",
                                     retryAfterSeconds);
 
-                                Plugin.TrackAnonymousUsageEvent(
+                                TrackUsage(trackUsage,
                                     "theintrodb_api_media_fetch",
                                     new Dictionary<string, object>
                                     {
@@ -169,7 +170,7 @@ namespace TheIntroDB.Api
 
                                 if ((int)response.StatusCode == 404)
                                 {
-                                    Plugin.TrackAnonymousUsageEvent(
+                                    TrackUsage(trackUsage,
                                         "theintrodb_api_media_fetch",
                                         new Dictionary<string, object>
                                         {
@@ -184,7 +185,7 @@ namespace TheIntroDB.Api
                                     return MediaFetchResult.NotFound();
                                 }
 
-                                Plugin.TrackAnonymousUsageEvent(
+                                TrackUsage(trackUsage,
                                     "theintrodb_api_media_fetch",
                                     new Dictionary<string, object>
                                     {
@@ -222,7 +223,7 @@ namespace TheIntroDB.Api
                                 mediaResponse?.Credits?.Count ?? 0,
                                 mediaResponse?.Preview?.Count ?? 0);
 
-                            Plugin.TrackAnonymousUsageEvent(
+                            TrackUsage(trackUsage,
                                 "theintrodb_api_media_fetch",
                                 new Dictionary<string, object>
                                 {
@@ -245,7 +246,7 @@ namespace TheIntroDB.Api
                     catch (Exception ex)
                     {
                         _logger.ErrorException(string.Format("TheIntroDB API request failed for {0}", requestUri), ex);
-                        Plugin.TrackAnonymousUsageEvent(
+                        TrackUsage(trackUsage,
                             "theintrodb_api_media_fetch",
                             new Dictionary<string, object>
                             {
@@ -270,6 +271,17 @@ namespace TheIntroDB.Api
             }
 
             return MediaFetchResult.Error();
+        }
+
+        private static void TrackUsage(
+            bool trackUsage,
+            string eventName,
+            Dictionary<string, object> properties)
+        {
+            if (trackUsage)
+            {
+                Plugin.TrackAnonymousUsageEvent(eventName, properties);
+            }
         }
 
         private static int GetRetryAfterSeconds(HttpResponseHeaders headers)

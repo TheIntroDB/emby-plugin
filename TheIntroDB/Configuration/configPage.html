@@ -86,6 +86,14 @@
                 <div class="fieldDescription">Recommended. An existing native credits marker remains authoritative.</div>
             </div>
 
+            <div class="checkboxContainer checkboxContainer-withDescription">
+                <label class="emby-checkbox-label">
+                    <input id="ReplaceExistingMarkers" name="ReplaceExistingMarkers" type="checkbox" is="emby-checkbox" />
+                    <span>Replace existing TheIntroDB-owned markers</span>
+                </label>
+                <div class="fieldDescription">Off by default. Only chapters carrying a matching durable TheIntroDB ownership token are removed before updated markers are applied. Native, manual, legacy and third-party chapters remain unchanged.</div>
+            </div>
+
             <div class="inputContainer">
                 <label class="inputLabel inputLabelUnfocused" for="MaxLookupsPerRun">Maximum API lookups per run</label>
                 <input id="MaxLookupsPerRun" name="MaxLookupsPerRun" type="number" min="0" step="1" is="emby-input" autocomplete="off" />

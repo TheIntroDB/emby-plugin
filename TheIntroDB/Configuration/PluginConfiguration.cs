@@ -26,6 +26,7 @@ namespace TheIntroDB.Configuration
             EnableOnDemandFetch = false;
             ProtectExistingIntroMarkers = true;
             ProtectExistingCreditsMarkers = true;
+            ReplaceExistingMarkers = false;
             MaxLookupsPerRun = 200;
         }
 
@@ -83,6 +84,12 @@ namespace TheIntroDB.Configuration
         /// Gets or sets a value indicating whether an existing credits marker protects credits.
         /// </summary>
         public bool ProtectExistingCreditsMarkers { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether chapters with durable TheIntroDB ownership provenance may be replaced.
+        /// Existing native, manual and third-party chapters are always preserved.
+        /// </summary>
+        public bool ReplaceExistingMarkers { get; set; }
 
         /// <summary>
         /// Gets or sets the maximum API lookups per scheduled run. Zero means no lookups.

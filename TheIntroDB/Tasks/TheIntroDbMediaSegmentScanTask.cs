@@ -38,7 +38,7 @@ namespace TheIntroDB.Tasks
             _logger = Plugin.Instance?.FileLogger ?? logManager.GetLogger("TheIntroDB");
             var segmentProvider = new TheIntroDbSegmentProvider(libraryManager, _logger);
             var repository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
-            var chapterWriter = new TheIntroDbChapterMarkerWriter(itemRepository, _logger);
+            var chapterWriter = new TheIntroDbChapterMarkerWriter(itemRepository, repository, _logger);
             _libraryScanner = new TheIntroDbLibraryScanner(libraryManager, segmentProvider, repository, chapterWriter, _logger);
         }
 
@@ -69,12 +69,13 @@ namespace TheIntroDB.Tasks
                 }
 
                 var config = Plugin.Instance.Configuration;
-                _logger.Info("TheIntroDB settings: Intro={0}, Recap={1}, Credits={2}, Preview={3}, IgnoreExisting={4}",
+                _logger.Info("TheIntroDB settings: Intro={0}, Recap={1}, Credits={2}, Preview={3}, IgnoreExisting={4}, ReplaceOwned={5}",
                     config.EnableIntro,
                     config.EnableRecap,
                     config.EnableCredits,
                     config.EnablePreview,
-                    config.IgnoreMediaWithExistingSegments);
+                    config.IgnoreMediaWithExistingSegments,
+                    config.ReplaceExistingMarkers);
 
                 var totalSegments = await _libraryScanner.ScanLibraryAsync(
                     new Action<string, int, int>((message, current, total) =>

@@ -957,6 +957,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                                 page.querySelector('#IgnoreMediaWithExistingSegments').checked = config.IgnoreMediaWithExistingSegments !== false;
                                 page.querySelector('#ProtectExistingIntroMarkers').checked = config.ProtectExistingIntroMarkers !== false;
                                 page.querySelector('#ProtectExistingCreditsMarkers').checked = config.ProtectExistingCreditsMarkers !== false;
+                                page.querySelector('#ReplaceExistingMarkers').checked = config.ReplaceExistingMarkers === true;
                                 page.querySelector('#MaxLookupsPerRun').value = config.MaxLookupsPerRun != null ? config.MaxLookupsPerRun : 200;
                                 page.querySelector('#EnableOnDemandFetch').checked = config.EnableOnDemandFetch !== false;
                                 page.querySelector('#EnableAnonymousUsageReporting').checked = config.EnableAnonymousUsageReporting !== false;
@@ -1090,6 +1091,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                             config.IgnoreMediaWithExistingSegments = page.querySelector('#IgnoreMediaWithExistingSegments').checked;
                             config.ProtectExistingIntroMarkers = page.querySelector('#ProtectExistingIntroMarkers').checked;
                             config.ProtectExistingCreditsMarkers = page.querySelector('#ProtectExistingCreditsMarkers').checked;
+                            config.ReplaceExistingMarkers = page.querySelector('#ReplaceExistingMarkers').checked;
                             config.MaxLookupsPerRun = Math.max(0, parseInt(page.querySelector('#MaxLookupsPerRun').value || '0', 10) || 0);
                             config.EnableOnDemandFetch = page.querySelector('#EnableOnDemandFetch').checked;
                             config.EnableAnonymousUsageReporting = page.querySelector('#EnableAnonymousUsageReporting').checked;

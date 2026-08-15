@@ -146,7 +146,7 @@ namespace TheIntroDB.Services
                     }
 
                     var result = await _segmentProvider.GetMediaSegmentsAsync(
-                      item.Id, cancellationToken, !preview).ConfigureAwait(false);
+                        item.Id, cancellationToken, !preview, !preview).ConfigureAwait(false);
 
                     if (result.IsRateLimited)
                     {

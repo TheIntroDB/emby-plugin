@@ -11,23 +11,38 @@ namespace TheIntroDB.Data
         IReadOnlyList<StoredMediaSegment> GetSegments(long itemInternalId);
         IReadOnlyList<long> GetAllSegmentedItemIds();
         void ReplaceSegments(long itemInternalId, IReadOnlyList<StoredMediaSegment> segments, DateTime updatedUtc);
+        IReadOnlyList<OwnedChapterMarker> GetOwnedChapters(long itemInternalId);
+        void ReplaceOwnedChapters(long itemInternalId, IReadOnlyList<OwnedChapterMarker> chapters, DateTime updatedUtc);
     }
 
     public sealed class PreviewSegmentRepository : ITheIntroDbSegmentRepository
     {
+        private readonly ITheIntroDbSegmentRepository _backing;
+
+        public PreviewSegmentRepository(ITheIntroDbSegmentRepository backing)
+        {
+            _backing = backing ?? throw new ArgumentNullException(nameof(backing));
+        }
+
         public bool HasAllSegmentTypes(long itemInternalId, IReadOnlyCollection<MediaSegmentType> types)
-            => false;
+            => _backing.HasAllSegmentTypes(itemInternalId, types);
 
         public HashSet<MediaSegmentType> GetStoredSegmentTypes(long itemInternalId)
-            => new HashSet<MediaSegmentType>();
+            => _backing.GetStoredSegmentTypes(itemInternalId);
 
         public IReadOnlyList<StoredMediaSegment> GetSegments(long itemInternalId)
-            => Array.Empty<StoredMediaSegment>();
+            => _backing.GetSegments(itemInternalId);
 
         public IReadOnlyList<long> GetAllSegmentedItemIds()
-            => Array.Empty<long>();
+            => _backing.GetAllSegmentedItemIds();
 
         public void ReplaceSegments(long itemInternalId, IReadOnlyList<StoredMediaSegment> segments, DateTime updatedUtc)
+            => throw new InvalidOperationException("Preview repository is read-only");
+
+        public IReadOnlyList<OwnedChapterMarker> GetOwnedChapters(long itemInternalId)
+            => _backing.GetOwnedChapters(itemInternalId);
+
+        public void ReplaceOwnedChapters(long itemInternalId, IReadOnlyList<OwnedChapterMarker> chapters, DateTime updatedUtc)
             => throw new InvalidOperationException("Preview repository is read-only");
     }
 }
