@@ -37,6 +37,17 @@ namespace TheIntroDB.Services
                 name.EndsWith(OwnershipSuffix, StringComparison.Ordinal);
         }
 
+        /// <summary>
+        /// True when the chapter name is an exact legacy TheIntroDB tag written by
+        /// pre-token releases (e.g. "Recap (TheIntroDB)"). These carry no ownership
+        /// token and are recognized so the one-time adoption pass can claim them.
+        /// </summary>
+        public static bool HasLegacyTaggedName(string name, string label)
+        {
+            return !string.IsNullOrEmpty(name) &&
+                string.Equals(name, label + TheIntroDbTag, StringComparison.Ordinal);
+        }
+
         public static bool HasNativeIntroMarker(IReadOnlyCollection<ChapterInfo> chapters)
         {
             return chapters.Any(c =>

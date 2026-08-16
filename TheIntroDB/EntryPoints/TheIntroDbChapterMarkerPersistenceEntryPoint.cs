@@ -28,6 +28,7 @@ namespace TheIntroDB.EntryPoints
         private readonly TheIntroDbSegmentRepository _segmentRepository;
         private readonly TheIntroDbChapterMarkerWriter _chapterWriter;
         private readonly TheIntroDbSegmentProvider _segmentProvider;
+        private readonly TheIntroDbLegacyMarkerAdoption _legacyAdoption;
         private readonly ILogger _logger;
 
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
@@ -46,6 +47,7 @@ namespace TheIntroDB.EntryPoints
             _segmentRepository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
             _chapterWriter = new TheIntroDbChapterMarkerWriter(_itemRepository, _segmentRepository, _logger);
             _segmentProvider = new TheIntroDbSegmentProvider(libraryManager, _logger);
+            _legacyAdoption = new TheIntroDbLegacyMarkerAdoption(_itemRepository, _segmentRepository, _logger);
         }
 
         public void Run()
@@ -53,10 +55,139 @@ namespace TheIntroDB.EntryPoints
             _libraryManager.ItemUpdated += LibraryManager_ItemUpdated;
             _libraryManager.ItemAdded += LibraryManager_ItemAdded;
 
+            // One-time pass (no API requests): claims markers written by pre-token
+            // releases into the ownership ledger so ReplaceExistingMarkers can
+            // manage them without forcing users to re-scan the library.
+            _ = TrackTaskAsync(RunLegacyMarkerAdoptionAsync(_cts.Token));
+
             // Background marker-repair pass: restores TheIntroDB markers that Emby
             // may have overwritten (e.g. placeholder chapters regenerated for files
             // without embedded chapters). Runs on a configurable interval.
             _ = TrackTaskAsync(RunMarkerRepairLoopAsync(_cts.Token));
+        }
+
+        /// <summary>
+        /// One-time legacy marker adoption pass. Runs once after a settle delay,
+        /// claims markers written by pre-token releases into the ownership ledger
+        /// (local chapters and ledger only, zero API requests), then records the
+        /// completion flag so later restarts skip it. Retried on the next start
+        /// when any item failed, since adoption is idempotent.
+        /// </summary>
+        private async Task RunLegacyMarkerAdoptionAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Give Emby a moment to settle after plugin load so the first
+                // pass doesn't race an in-progress library scan.
+                await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            try
+            {
+                var plugin = Plugin.Instance;
+                var config = plugin?.Configuration;
+                if (plugin == null || config == null || config.LegacyMarkerAdoptionVersion >= 1)
+                {
+                    return;
+                }
+
+                var segmentedIds = new HashSet<long>(_segmentRepository.GetAllSegmentedItemIds());
+                if (segmentedIds.Count == 0)
+                {
+                    MarkAdoptionComplete(plugin, config, 0, 0, 0);
+                    return;
+                }
+
+                var items = _libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    IncludeItemTypes = new[] { "Movie", "Episode" },
+                    Recursive = true
+                }) ?? Array.Empty<BaseItem>();
+
+                var adoptedChapters = 0;
+                var adoptedItems = 0;
+                var failedItems = 0;
+
+                foreach (var item in items)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    if (item == null || !segmentedIds.Contains(item.InternalId))
+                    {
+                        continue;
+                    }
+
+                    if (!_writesInProgress.TryAdd(item.InternalId, 0))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var adopted = _legacyAdoption.AdoptItem(item);
+                        if (adopted > 0)
+                        {
+                            adoptedChapters += adopted;
+                            adoptedItems++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        failedItems++;
+                        _logger.Error("TheIntroDB legacy marker adoption failed for {0}: {1}", item.Name, ex.Message);
+                    }
+                    finally
+                    {
+                        _writesInProgress.TryRemove(item.InternalId, out _);
+                    }
+                }
+
+                _logger.Info(
+                    "TheIntroDB legacy marker adoption pass finished: {0} chapters adopted across {1} items, {2} failed (no API requests)",
+                    adoptedChapters, adoptedItems, failedItems);
+
+                if (failedItems == 0)
+                {
+                    MarkAdoptionComplete(plugin, config, adoptedChapters, adoptedItems, failedItems);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("TheIntroDB legacy marker adoption pass failed: {0}", ex.Message);
+            }
+        }
+
+        private void MarkAdoptionComplete(
+            Plugin plugin,
+            PluginConfiguration config,
+            int adoptedChapters,
+            int adoptedItems,
+            int failedItems)
+        {
+            if (config.LegacyMarkerAdoptionVersion >= 1)
+            {
+                return;
+            }
+
+            config.LegacyMarkerAdoptionVersion = 1;
+            try
+            {
+                plugin.SaveConfiguration();
+                _logger.Info(
+                    "TheIntroDB legacy marker adoption marked complete ({0} chapters, {1} items, {2} failed)",
+                    adoptedChapters, adoptedItems, failedItems);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("TheIntroDB failed to save legacy marker adoption completion flag: {0}", ex.Message);
+            }
         }
 
         public void Dispose()
@@ -312,11 +443,13 @@ namespace TheIntroDB.EntryPoints
 
                 if (!hasRecap)
                 {
-                    if (IsDurablyOwnedChapter(c, ownedChapters) &&
+                    if ((IsDurablyOwnedChapter(c, ownedChapters) &&
                         (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap") ||
                          ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End") ||
                          ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap" + ChapterMarkerPolicy.TheIntroDbTag) ||
-                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End" + ChapterMarkerPolicy.TheIntroDbTag)))
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End" + ChapterMarkerPolicy.TheIntroDbTag))) ||
+                        ChapterMarkerPolicy.HasLegacyTaggedName(c.Name, "Recap") ||
+                        ChapterMarkerPolicy.HasLegacyTaggedName(c.Name, "Recap End"))
                     {
                         hasRecap = true;
                     }
@@ -324,11 +457,13 @@ namespace TheIntroDB.EntryPoints
 
                 if (!hasPreview)
                 {
-                    if (IsDurablyOwnedChapter(c, ownedChapters) &&
+                    if ((IsDurablyOwnedChapter(c, ownedChapters) &&
                         (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview") ||
                          ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End") ||
                          ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview" + ChapterMarkerPolicy.TheIntroDbTag) ||
-                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End" + ChapterMarkerPolicy.TheIntroDbTag)))
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End" + ChapterMarkerPolicy.TheIntroDbTag))) ||
+                        ChapterMarkerPolicy.HasLegacyTaggedName(c.Name, "Preview") ||
+                        ChapterMarkerPolicy.HasLegacyTaggedName(c.Name, "Preview End"))
                     {
                         hasPreview = true;
                     }
