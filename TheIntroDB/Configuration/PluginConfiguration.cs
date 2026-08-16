@@ -19,10 +19,15 @@ namespace TheIntroDB.Configuration
             EnableIntro = true;
             EnableRecap = true;
             EnableCredits = true;
-            EnablePreview = true;
+            EnablePreview = false;
             IgnoreMediaWithExistingSegments = true;
-            EnableAnonymousUsageReporting = true;
+            EnableAnonymousUsageReporting = false;
             EnableFileLogging = false;
+            EnableOnDemandFetch = false;
+            ProtectExistingIntroMarkers = true;
+            ProtectExistingCreditsMarkers = true;
+            ReplaceExistingMarkers = false;
+            MaxLookupsPerRun = 200;
         }
 
         public int SchemaVersion { get; set; }
@@ -71,6 +76,27 @@ namespace TheIntroDB.Configuration
         public bool IgnoreMediaWithExistingSegments { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether any existing intro marker protects the intro pair.
+        /// </summary>
+        public bool ProtectExistingIntroMarkers { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether an existing credits marker protects credits.
+        /// </summary>
+        public bool ProtectExistingCreditsMarkers { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether chapters with durable TheIntroDB ownership provenance may be replaced.
+        /// Existing native, manual and third-party chapters are always preserved.
+        /// </summary>
+        public bool ReplaceExistingMarkers { get; set; }
+
+        /// <summary>
+        /// Gets or sets the maximum API lookups per scheduled run. Zero means no lookups.
+        /// </summary>
+        public int MaxLookupsPerRun { get; set; }
+
+        /// <summary>
         /// Gets or sets a value indicating whether anonymous usage reporting is enabled.
         /// </summary>
         public bool EnableAnonymousUsageReporting { get; set; }
@@ -84,7 +110,7 @@ namespace TheIntroDB.Configuration
         /// <summary>
         /// Gets or sets a value indicating whether to automatically fetch segments for newly added items and on playback start.
         /// </summary>
-        public bool EnableOnDemandFetch { get; set; } = true;
+        public bool EnableOnDemandFetch { get; set; } = false;
 
         /// <summary>
         /// Gets or sets how often (in hours) the plugin checks items it has segments for

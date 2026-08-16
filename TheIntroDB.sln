@@ -1,9 +1,11 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TheIntroDB", "TheIntroDB\TheIntroDB.csproj", "{B2C3D4E5-F6A7-8901-BCDE-F12345678901}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TheIntroDB.Tests", "TheIntroDB.Tests\TheIntroDB.Tests.csproj", "{4487AF6D-AC09-4102-ADBB-D65DAB51218D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,5 +17,9 @@ Global
 		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4487AF6D-AC09-4102-ADBB-D65DAB51218D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4487AF6D-AC09-4102-ADBB-D65DAB51218D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4487AF6D-AC09-4102-ADBB-D65DAB51218D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4487AF6D-AC09-4102-ADBB-D65DAB51218D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

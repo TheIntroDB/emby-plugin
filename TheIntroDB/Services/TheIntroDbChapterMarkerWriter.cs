@@ -6,6 +6,7 @@ using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
 using TheIntroDB.Configuration;
+using TheIntroDB.Data;
 using TheIntroDB.Models;
 
 namespace TheIntroDB.Services
@@ -13,20 +14,20 @@ namespace TheIntroDB.Services
     public sealed class TheIntroDbChapterMarkerWriter
     {
         private readonly IItemRepository _itemRepository;
+        private readonly ITheIntroDbSegmentRepository _segmentRepository;
         private readonly ILogger _logger;
 
-        private
-        const string TheIntroDbTag = " (TheIntroDB)";
 
         public TheIntroDbChapterMarkerWriter(IItemRepository itemRepository,
-          ILogger logger)
+          ITheIntroDbSegmentRepository segmentRepository, ILogger logger)
         {
             _itemRepository = itemRepository;
+            _segmentRepository = segmentRepository;
             _logger = logger;
         }
 
         public int ApplyMarkers(BaseItem item, IReadOnlyList<StoredMediaSegment>
-          segments, PluginConfiguration config)
+          segments, PluginConfiguration config, bool preview = false)
         {
             if (item == null || segments == null || segments.Count == 0 ||
               config == null)
@@ -39,7 +40,33 @@ namespace TheIntroDB.Services
             var chapters = new List<ChapterInfo>(existing.Count + segments.Count * 2);
             chapters.AddRange(existing);
 
-            RemoveExistingTheIntroDbMarkers(chapters);
+            var storedOwned = (_segmentRepository.GetOwnedChapters(item.InternalId) ??
+                Array.Empty<OwnedChapterMarker>()).ToList();
+            var owned = storedOwned
+                .Where(marker => chapters.Any(chapter => OwnedChapterMatches(marker, chapter)))
+                .ToList();
+            var removed = 0;
+            if (config.ReplaceExistingMarkers && owned.Count > 0)
+            {
+                foreach (var ownedMarker in owned)
+                {
+                    var chapterIndex = chapters.FindIndex(chapter => OwnedChapterMatches(ownedMarker, chapter));
+                    if (chapterIndex >= 0)
+                    {
+                        chapters.RemoveAt(chapterIndex);
+                        removed++;
+                    }
+                }
+
+                owned.Clear();
+            }
+
+            var protectIntro = (config.ProtectExistingIntroMarkers ||
+                config.ReplaceExistingMarkers) &&
+                ChapterMarkerPolicy.HasNativeIntroMarker(chapters);
+            var protectCredits = (config.ProtectExistingCreditsMarkers ||
+                config.ReplaceExistingMarkers) &&
+                ChapterMarkerPolicy.HasNativeCreditsMarker(chapters);
 
             var added = 0;
             var durationTicks = item.RunTimeTicks.HasValue &&
@@ -74,108 +101,127 @@ namespace TheIntroDB.Services
                 switch (s.Type)
                 {
                     case MediaSegmentType.Intro:
-                        if (config.EnableIntro)
+                        if (config.EnableIntro && !protectIntro)
                         {
-                            added += AddIntroMarkers(chapters, normalized);
+                            added += AddIntroMarkers(chapters, owned, item.InternalId, normalized);
                         }
                         break;
                     case MediaSegmentType.Recap:
                         if (config.EnableRecap)
                         {
-                            added += AddChapterRange(chapters, "Recap",
+                            added += AddChapterRange(chapters, owned, item.InternalId, "Recap",
                               "Recap End", normalized);
                         }
                         break;
                     case MediaSegmentType.Credits:
-                        if (config.EnableCredits)
+                        if (config.EnableCredits && !protectCredits)
                         {
-                            added += AddCreditsMarkers(chapters, normalized);
+                            added += AddCreditsMarkers(chapters, owned, item.InternalId, normalized);
                         }
                         break;
                     case MediaSegmentType.Preview:
                         if (config.EnablePreview)
                         {
-                            added += AddChapterRange(chapters, "Preview",
+                            added += AddChapterRange(chapters, owned, item.InternalId, "Preview",
                               "Preview End", normalized);
                         }
                         break;
                 }
             }
 
-            var deduped = Deduplicate(chapters);
-            deduped.Sort((a, b) =>
-              a.StartPositionTicks.CompareTo(b.StartPositionTicks));
-
-            if (ChapterListsEqual(existing, deduped))
+            if (removed == 0 && added == 0)
             {
-                _logger.Debug("TheIntroDB chapters unchanged for {0} ({1}), skipping save",
-                    item.Name, item.InternalId);
+                if (!preview && !OwnedChapterListsEqual(storedOwned, owned))
+                {
+                    _segmentRepository.ReplaceOwnedChapters(item.InternalId,
+                        DeduplicateOwnedChapters(owned), DateTime.UtcNow);
+                }
+
+                _logger.Debug("TheIntroDB chapters unchanged for {0} ({1})",
+                  item.Name, item.InternalId);
                 return 0;
             }
 
-            _itemRepository.SaveChapters(item.InternalId, deduped);
+            if (preview)
+            {
+                _logger.Debug("TheIntroDB preview would save {0} chapters/markers for {1} ({2})",
+                    chapters.Count, item.Name, item.InternalId);
+                return added;
+            }
+
+            var updatedChapters = chapters
+                .Select((chapter, index) => new { Chapter = chapter, Index = index })
+                .OrderBy(value => value.Chapter.StartPositionTicks)
+                .ThenBy(value => value.Index)
+                .Select(value => value.Chapter)
+                .ToList();
+            _itemRepository.SaveChapters(item.InternalId, updatedChapters);
+            _segmentRepository.ReplaceOwnedChapters(item.InternalId,
+                DeduplicateOwnedChapters(owned), DateTime.UtcNow);
             _logger.Debug("TheIntroDB saved {0} chapters/markers for {1} ({2})",
-              deduped.Count, item.Name, item.InternalId);
+              updatedChapters.Count, item.Name, item.InternalId);
 
             return added;
         }
 
         private int AddIntroMarkers(List<ChapterInfo> chapters,
-          StoredMediaSegment s)
+          List<OwnedChapterMarker> owned, long itemInternalId, StoredMediaSegment s)
         {
             var added = 0;
 
-            // Always add start marker — even at 0:00
-            added += AddIfMissing(chapters, MarkerType.IntroStart,
-              s.StartTicks, "Intro");
-            added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.StartTicks, "Intro" + TheIntroDbTag);
+            // Always add start marker, even at 0:00
+            added += AddIfMissing(chapters, owned, itemInternalId,
+              MarkerType.IntroStart, s.StartTicks, "Intro");
+            added += AddIfMissing(chapters, owned, itemInternalId,
+              MarkerType.Chapter, s.StartTicks, "Intro" + ChapterMarkerPolicy.TheIntroDbTag);
 
-            // Always add end marker — even if it equals start
+            // Always add end marker, even if it equals start
             // (e.g. point-like intro at 0:00)
-            added += AddIfMissing(chapters, MarkerType.IntroEnd, s.EndTicks,
-              "Intro End");
-            added += AddIfMissing(chapters, MarkerType.Chapter, s.EndTicks,
-              "Intro End" + TheIntroDbTag);
+            added += AddIfMissing(chapters, owned, itemInternalId,
+              MarkerType.IntroEnd, s.EndTicks, "Intro End");
+            added += AddIfMissing(chapters, owned, itemInternalId,
+              MarkerType.Chapter, s.EndTicks, "Intro End" + ChapterMarkerPolicy.TheIntroDbTag);
 
             return added;
         }
 
         private int AddCreditsMarkers(List<ChapterInfo> chapters,
-          StoredMediaSegment s)
+          List<OwnedChapterMarker> owned, long itemInternalId, StoredMediaSegment s)
         {
             var added = 0;
 
             // Start marker
-            added += AddIfMissing(chapters, MarkerType.CreditsStart,
-              s.StartTicks, "Credits");
-            added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.StartTicks, "Credits" + TheIntroDbTag);
+            added += AddIfMissing(chapters, owned, itemInternalId,
+              MarkerType.CreditsStart, s.StartTicks, "Credits");
+            added += AddIfMissing(chapters, owned, itemInternalId,
+              MarkerType.Chapter, s.StartTicks, "Credits" + ChapterMarkerPolicy.TheIntroDbTag);
 
-            // End marker at media duration — credits extend to the end
-            added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.EndTicks, "Credits End" + TheIntroDbTag);
+            // End marker at media duration, credits extend to the end
+            added += AddIfMissing(chapters, owned, itemInternalId,
+              MarkerType.Chapter, s.EndTicks, "Credits End" + ChapterMarkerPolicy.TheIntroDbTag);
 
             return added;
         }
 
         private int AddChapterRange(List<ChapterInfo> chapters,
+          List<OwnedChapterMarker> owned, long itemInternalId,
           string startName, string endName, StoredMediaSegment s)
         {
             var added = 0;
 
-            // Always add start marker — even at 0:00
-            added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.StartTicks, startName + TheIntroDbTag);
+            // Always add start marker, even at 0:00
+            added += AddIfMissing(chapters, owned, itemInternalId,
+              MarkerType.Chapter, s.StartTicks, startName + ChapterMarkerPolicy.TheIntroDbTag);
 
-            // Always add end marker — even if it equals start
-            added += AddIfMissing(chapters, MarkerType.Chapter,
-              s.EndTicks, endName + TheIntroDbTag);
+            // Always add end marker, even if it equals start
+            added += AddIfMissing(chapters, owned, itemInternalId,
+              MarkerType.Chapter, s.EndTicks, endName + ChapterMarkerPolicy.TheIntroDbTag);
 
             return added;
         }
 
         private static int AddIfMissing(List<ChapterInfo> chapters,
+          List<OwnedChapterMarker> owned, long itemInternalId,
           MarkerType markerType, long startTicks, string name)
         {
             if (chapters.Any(c => c.MarkerType == markerType &&
@@ -184,39 +230,64 @@ namespace TheIntroDB.Services
                 return 0;
             }
 
+            var ownerToken = Guid.NewGuid().ToString("N");
+            var ownedName = ChapterMarkerPolicy.AddOwnershipToken(name, ownerToken);
             chapters.Add(new ChapterInfo
             {
-                Name = name,
+                Name = ownedName,
                 StartPositionTicks = startTicks,
                 MarkerType = markerType
+            });
+            owned.Add(new OwnedChapterMarker
+            {
+                ItemInternalId = itemInternalId,
+                MarkerType = markerType,
+                StartTicks = startTicks,
+                Name = ownedName,
+                OwnerToken = ownerToken
             });
 
             return 1;
         }
 
-        private static void RemoveExistingTheIntroDbMarkers(
-          List<ChapterInfo> chapters)
+        private static bool OwnedChapterMatches(OwnedChapterMarker owned, ChapterInfo chapter)
         {
-            if (chapters == null || chapters.Count == 0)
+            return owned.MarkerType == chapter.MarkerType &&
+                owned.StartTicks == chapter.StartPositionTicks &&
+                string.Equals(owned.Name ?? string.Empty, chapter.Name ?? string.Empty, StringComparison.Ordinal) &&
+                ChapterMarkerPolicy.HasOwnershipToken(chapter.Name, owned.OwnerToken);
+        }
+
+        private static string OwnedChapterKey(OwnedChapterMarker chapter)
+        {
+            return ((int)chapter.MarkerType).ToString() + ":" +
+                chapter.StartTicks.ToString() + ":" +
+                (chapter.Name ?? string.Empty) + ":" +
+                (chapter.OwnerToken ?? string.Empty);
+        }
+
+        private static IReadOnlyList<OwnedChapterMarker> DeduplicateOwnedChapters(
+          IEnumerable<OwnedChapterMarker> chapters)
+        {
+            var result = new List<OwnedChapterMarker>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var chapter in chapters)
             {
-                return;
+                if (seen.Add(OwnedChapterKey(chapter)))
+                {
+                    result.Add(chapter);
+                }
             }
 
-            chapters.RemoveAll(c =>
-              (c.MarkerType == MarkerType.IntroStart &&
-                string.Equals(c.Name, "Intro", StringComparison.Ordinal)) ||
-              (c.MarkerType == MarkerType.IntroEnd &&
-                string.Equals(c.Name, "Intro End", StringComparison.Ordinal)) ||
-              (c.MarkerType == MarkerType.CreditsStart &&
-                string.Equals(c.Name, "Credits", StringComparison.Ordinal)) ||
-              (c.MarkerType == MarkerType.Chapter && c.Name != null &&
-                c.Name.EndsWith(TheIntroDbTag, StringComparison.Ordinal)) ||
-              string.Equals(c.Name, "IntroStartMarker",
-                StringComparison.Ordinal) ||
-              string.Equals(c.Name, "IntroEndMarker",
-                StringComparison.Ordinal) ||
-              string.Equals(c.Name, "CreditsStartMarker",
-                StringComparison.Ordinal));
+            return result;
+        }
+
+        private static bool OwnedChapterListsEqual(
+          IEnumerable<OwnedChapterMarker> a, IEnumerable<OwnedChapterMarker> b)
+        {
+            var left = new HashSet<string>(a.Select(OwnedChapterKey), StringComparer.Ordinal);
+            var right = new HashSet<string>(b.Select(OwnedChapterKey), StringComparer.Ordinal);
+            return left.SetEquals(right);
         }
 
         private static long ClampTicks(long ticks, long? durationTicks)
@@ -240,57 +311,6 @@ namespace TheIntroDB.Services
             return ticks > max ? max : ticks;
         }
 
-        private static List<ChapterInfo> Deduplicate(
-          IEnumerable<ChapterInfo> chapters)
-        {
-            var list = new List<ChapterInfo>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
 
-            foreach (var c in chapters)
-            {
-                var key = ((int)c.MarkerType).ToString() + ":" +
-                  c.StartPositionTicks.ToString() + ":" +
-                  (c.Name ?? string.Empty);
-                if (seen.Add(key))
-                {
-                    list.Add(c);
-                }
-            }
-
-            return list;
-        }
-
-        private static bool ChapterListsEqual(
-          IReadOnlyList<ChapterInfo> a,
-          IReadOnlyList<ChapterInfo> b)
-        {
-            if (a.Count != b.Count)
-            {
-                return false;
-            }
-
-            var keyA = new HashSet<string>(StringComparer.Ordinal);
-            for (int i = 0; i < a.Count; i++)
-            {
-                keyA.Add(ChapterKey(a[i]));
-            }
-
-            for (int i = 0; i < b.Count; i++)
-            {
-                if (!keyA.Contains(ChapterKey(b[i])))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        private static string ChapterKey(ChapterInfo c)
-        {
-            return ((int)c.MarkerType).ToString() + ":" +
-                c.StartPositionTicks.ToString() + ":" +
-                (c.Name ?? string.Empty);
-        }
     }
 }

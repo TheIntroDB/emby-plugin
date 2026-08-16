@@ -48,10 +48,14 @@ namespace TheIntroDB.Providers
         /// </summary>
         /// <param name="itemId">The item ID to fetch segments for.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
+        /// <param name="initializeConfiguration">Whether configuration migration may persist changes.</param>
+        /// <param name="trackUsage">Whether successful lookups may emit anonymous usage events.</param>
         /// <returns>Fetch result with segment data or empty if not found.</returns>
         public async Task<SegmentFetchResult> GetMediaSegmentsAsync(
           Guid itemId,
-          CancellationToken cancellationToken)
+          CancellationToken cancellationToken,
+          bool initializeConfiguration = true,
+          bool trackUsage = true)
         {
             _logger.Info("GetMediaSegmentsAsync called for ItemId={0}", itemId);
 
@@ -61,7 +65,10 @@ namespace TheIntroDB.Providers
                 return SegmentFetchResult.NotFound();
             }
 
-            Plugin.Instance.EnsureConfigurationInitialized();
+            if (initializeConfiguration)
+            {
+                Plugin.Instance.EnsureConfigurationInitialized();
+            }
 
             var config = Plugin.Instance.Configuration;
             if (config is null)
@@ -138,7 +145,9 @@ namespace TheIntroDB.Providers
             long? durationMs = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0 ?
               item.RunTimeTicks.Value / TimeSpan.TicksPerMillisecond :
               (long?)null;
-            var mediaResult = await client.GetMediaAsync(tmdbId, tvdbId, imdbId, isMovie, season, episode, durationMs, cancellationToken).ConfigureAwait(false);
+            var mediaResult = await client.GetMediaAsync(
+                tmdbId, tvdbId, imdbId, isMovie, season, episode,
+                durationMs, cancellationToken, trackUsage).ConfigureAwait(false);
 
             if (mediaResult.IsNotFound)
             {
@@ -187,26 +196,29 @@ namespace TheIntroDB.Providers
             var recapCount = segments.Count(s => s.Type == MediaSegmentType.Recap);
             var creditsCount = segments.Count(s => s.Type == MediaSegmentType.Credits);
             var previewCount = segments.Count(s => s.Type == MediaSegmentType.Preview);
-            Plugin.TrackAnonymousUsageEvent(
-              "segments_generated",
-              new Dictionary<string, object>
-              {
-                  ["host"] = "emby",
-                  ["media_type"] = isMovie ? "movie" : "episode",
-                  ["has_tmdb"] = tmdbId.HasValue && tmdbId.Value > 0 ? 1 : 0,
-                  ["has_tvdb"] = tvdbId.HasValue && tvdbId.Value > 0 ? 1 : 0,
-                  ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
-                  ["segments_total"] = segments.Count,
-                  ["segments_intro"] = introCount,
-                  ["segments_recap"] = recapCount,
-                  ["segments_credits"] = creditsCount,
-                  ["segments_preview"] = previewCount,
-                  ["enable_intro"] = config.EnableIntro ? 1 : 0,
-                  ["enable_recap"] = config.EnableRecap ? 1 : 0,
-                  ["enable_credits"] = config.EnableCredits ? 1 : 0,
-                  ["enable_preview"] = config.EnablePreview ? 1 : 0,
-                  ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
-              });
+            if (trackUsage)
+            {
+                Plugin.TrackAnonymousUsageEvent(
+                  "segments_generated",
+                  new Dictionary<string, object>
+                  {
+                      ["host"] = "emby",
+                      ["media_type"] = isMovie ? "movie" : "episode",
+                      ["has_tmdb"] = tmdbId.HasValue && tmdbId.Value > 0 ? 1 : 0,
+                      ["has_tvdb"] = tvdbId.HasValue && tvdbId.Value > 0 ? 1 : 0,
+                      ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
+                      ["segments_total"] = segments.Count,
+                      ["segments_intro"] = introCount,
+                      ["segments_recap"] = recapCount,
+                      ["segments_credits"] = creditsCount,
+                      ["segments_preview"] = previewCount,
+                      ["enable_intro"] = config.EnableIntro ? 1 : 0,
+                      ["enable_recap"] = config.EnableRecap ? 1 : 0,
+                      ["enable_credits"] = config.EnableCredits ? 1 : 0,
+                      ["enable_preview"] = config.EnablePreview ? 1 : 0,
+                      ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                  });
+            }
 
             _logger.Info("Returning {0} segments for {1}", segments.Count, item.Name);
             return SegmentFetchResult.Success(segments);
@@ -321,7 +333,7 @@ namespace TheIntroDB.Providers
                 }
                 else
                 {
-                    // No end time and no runtime — still add the segment
+                    // No end time and no runtime, still add the segment
                     // with EndTicks = 0 so the marker writer can handle it
                     // (it will substitute the media duration there)
                     endMs = 0;

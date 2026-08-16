@@ -87,7 +87,7 @@ namespace TheIntroDB.EntryPoints
             }
             catch (AggregateException)
             {
-                // Swallow task exceptions during shutdown — they were already logged
+                // Swallow task exceptions during shutdown, they were already logged
             }
 
             _repository.Dispose();

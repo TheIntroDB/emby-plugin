@@ -44,7 +44,7 @@ namespace TheIntroDB.EntryPoints
             _itemRepository = itemRepository;
             _logger = Plugin.Instance?.FileLogger ?? logManager.GetLogger("TheIntroDB");
             _segmentRepository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
-            _chapterWriter = new TheIntroDbChapterMarkerWriter(_itemRepository, _logger);
+            _chapterWriter = new TheIntroDbChapterMarkerWriter(_itemRepository, _segmentRepository, _logger);
             _segmentProvider = new TheIntroDbSegmentProvider(libraryManager, _logger);
         }
 
@@ -76,7 +76,7 @@ namespace TheIntroDB.EntryPoints
             }
             catch (AggregateException)
             {
-                // Swallow task exceptions during shutdown — they were already logged
+                // Swallow task exceptions during shutdown, they were already logged
             }
 
             _segmentRepository.Dispose();
@@ -154,13 +154,13 @@ namespace TheIntroDB.EntryPoints
                 }
 
                 var existingChapters = _itemRepository.GetChapters(item) ?? new List<ChapterInfo>();
-                if (!NeedsMarkerApply(existingChapters, config))
+                var ownedChapters = _segmentRepository.GetOwnedChapters(internalId);
+                if (!NeedsMarkerApply(existingChapters, ownedChapters, config))
                 {
                     return false;
                 }
 
-                _chapterWriter.ApplyMarkers(item, segments, config);
-                return true;
+                return _chapterWriter.ApplyMarkers(item, segments, config) > 0;
             }
             catch (Exception ex)
             {
@@ -237,13 +237,13 @@ namespace TheIntroDB.EntryPoints
             }
         }
 
-        private async Task RepairWipedMarkersAsync(PluginConfiguration config, CancellationToken cancellationToken)
+        private Task RepairWipedMarkersAsync(PluginConfiguration config, CancellationToken cancellationToken)
         {
             var segmentedIds = new HashSet<long>(_segmentRepository.GetAllSegmentedItemIds());
             if (segmentedIds.Count == 0)
             {
                 _logger.Debug("TheIntroDB marker repair: no items with stored segments, skipping");
-                return;
+                return Task.CompletedTask;
             }
 
             var items = _libraryManager.GetItemList(new InternalItemsQuery
@@ -275,9 +275,13 @@ namespace TheIntroDB.EntryPoints
             }
 
             _logger.Info("TheIntroDB marker repair pass complete: {0}/{1} segmented items needed marker restoration", repaired, checkedItems);
+            return Task.CompletedTask;
         }
 
-        private static bool NeedsMarkerApply(IReadOnlyList<ChapterInfo> chapters, PluginConfiguration config)
+        private static bool NeedsMarkerApply(
+            IReadOnlyList<ChapterInfo> chapters,
+            IReadOnlyList<OwnedChapterMarker> ownedChapters,
+            PluginConfiguration config)
         {
             var hasIntro = !config.EnableIntro;
             var hasRecap = !config.EnableRecap;
@@ -308,10 +312,11 @@ namespace TheIntroDB.EntryPoints
 
                 if (!hasRecap)
                 {
-                    if (string.Equals(c.Name, "Recap", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Recap End", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Recap (TheIntroDB)", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Recap End (TheIntroDB)", StringComparison.Ordinal))
+                    if (IsDurablyOwnedChapter(c, ownedChapters) &&
+                        (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap") ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End") ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap" + ChapterMarkerPolicy.TheIntroDbTag) ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End" + ChapterMarkerPolicy.TheIntroDbTag)))
                     {
                         hasRecap = true;
                     }
@@ -319,10 +324,11 @@ namespace TheIntroDB.EntryPoints
 
                 if (!hasPreview)
                 {
-                    if (string.Equals(c.Name, "Preview", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Preview End", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Preview (TheIntroDB)", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Preview End (TheIntroDB)", StringComparison.Ordinal))
+                    if (IsDurablyOwnedChapter(c, ownedChapters) &&
+                        (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview") ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End") ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview" + ChapterMarkerPolicy.TheIntroDbTag) ||
+                         ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End" + ChapterMarkerPolicy.TheIntroDbTag)))
                     {
                         hasPreview = true;
                     }
@@ -335,6 +341,17 @@ namespace TheIntroDB.EntryPoints
             }
 
             return !(hasIntro && hasRecap && hasCredits && hasPreview);
+        }
+
+        private static bool IsDurablyOwnedChapter(
+            ChapterInfo chapter,
+            IReadOnlyList<OwnedChapterMarker> ownedChapters)
+        {
+            return ownedChapters != null && ownedChapters.Any(owned =>
+                owned.MarkerType == chapter.MarkerType &&
+                owned.StartTicks == chapter.StartPositionTicks &&
+                string.Equals(owned.Name, chapter.Name, StringComparison.Ordinal) &&
+                ChapterMarkerPolicy.HasOwnershipToken(chapter.Name, owned.OwnerToken));
         }
 
         private async Task OnDemandFetchAsync(BaseItem item, string trigger, CancellationToken cancellationToken)
