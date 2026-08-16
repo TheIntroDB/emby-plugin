@@ -28,6 +28,7 @@ namespace TheIntroDB.Configuration
             ProtectExistingCreditsMarkers = true;
             ReplaceExistingMarkers = false;
             MaxLookupsPerRun = 200;
+            LegacyMarkerAdoptionVersion = 0;
         }
 
         public int SchemaVersion { get; set; }
@@ -95,6 +96,13 @@ namespace TheIntroDB.Configuration
         /// Gets or sets the maximum API lookups per scheduled run. Zero means no lookups.
         /// </summary>
         public int MaxLookupsPerRun { get; set; }
+
+        /// <summary>
+        /// Gets or sets the completed version of the one-time legacy marker adoption pass.
+        /// 0 means the pass has not run yet; 1 means markers written by pre-token
+        /// releases have been claimed into the ownership ledger (or there was nothing to claim).
+        /// </summary>
+        public int LegacyMarkerAdoptionVersion { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether anonymous usage reporting is enabled.

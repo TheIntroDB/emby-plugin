@@ -396,7 +396,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void RepairRecognizesOnlyDurablyOwnedTokenizedRecap()
+        public void RepairRecognizesOnlyDurablyOwnedOrLegacyTaggedRecap()
         {
             const string token = "ffffffffffffffffffffffffffffffff";
             var name = ChapterMarkerPolicy.AddOwnershipToken("Recap" + ChapterMarkerPolicy.TheIntroDbTag, token);
@@ -422,12 +422,15 @@ namespace TheIntroDB.Tests
 
             Assert.NotNull(method);
             var legacyChapter = Chapter(MarkerType.Chapter, 42L, "Recap (TheIntroDB)");
+            var bareChapter = Chapter(MarkerType.Chapter, 42L, "Recap");
             var ownedResult = (bool?)method.Invoke(null, new object[] { new[] { chapter }, new[] { owned }, config });
             var unownedResult = (bool?)method.Invoke(null, new object[] { new[] { chapter }, Array.Empty<OwnedChapterMarker>(), config });
             var legacyResult = (bool?)method.Invoke(null, new object[] { new[] { legacyChapter }, Array.Empty<OwnedChapterMarker>(), config });
+            var bareResult = (bool?)method.Invoke(null, new object[] { new[] { bareChapter }, Array.Empty<OwnedChapterMarker>(), config });
             Assert.False(ownedResult.GetValueOrDefault(true));
             Assert.True(unownedResult.GetValueOrDefault(false));
-            Assert.True(legacyResult.GetValueOrDefault(false));
+            Assert.False(legacyResult.GetValueOrDefault(true));
+            Assert.True(bareResult.GetValueOrDefault(false));
         }
 
         private static ChapterInfo Chapter(MarkerType markerType, long ticks, string name)
