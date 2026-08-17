@@ -14,7 +14,8 @@ namespace TheIntroDB.Api
 {
     public class TheIntroDbClient
     {
-        private const int MaxRequestsPerWindow = 30;
+        // Keep a safety margin below the provider ceiling of 30 requests per 10 seconds.
+        private const int MaxRequestsPerWindow = 25;
         private static readonly TimeSpan RateLimitWindow = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan MinDelayBetweenRequests = TimeSpan.FromMilliseconds(RateLimitWindow.TotalMilliseconds / MaxRequestsPerWindow);
 

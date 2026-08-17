@@ -46,6 +46,19 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
+        public void RequestPacingKeepsThirtyStartsOutsideTenSecondWindow()
+        {
+            var field = typeof(TheIntroDB.Api.TheIntroDbClient).GetField(
+                "MinDelayBetweenRequests",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var minimumDelay = Assert.IsType<TimeSpan>(field?.GetValue(null));
+
+            Assert.True(
+                TimeSpan.FromTicks(minimumDelay.Ticks * 29) >= TimeSpan.FromSeconds(10),
+                $"Thirty request starts can fit inside ten seconds with a {minimumDelay.TotalMilliseconds} ms delay.");
+        }
+
+        [Fact]
         public void PreviewComputesChangesWithoutSavingChapters()
         {
             var repository = new Mock<IItemRepository>();
