@@ -67,7 +67,7 @@ namespace TheIntroDB.Providers
 
             if (initializeConfiguration)
             {
-                Plugin.Instance.EnsureConfigurationInitialized();
+                Plugin.Instance.InitConfig();
             }
 
             var config = Plugin.Instance.Configuration;
@@ -198,7 +198,7 @@ namespace TheIntroDB.Providers
             var previewCount = segments.Count(s => s.Type == MediaSegmentType.Preview);
             if (trackUsage)
             {
-                Plugin.TrackAnonymousUsageEvent(
+                Plugin.TrackUsage(
                   "segments_generated",
                   new Dictionary<string, object>
                   {

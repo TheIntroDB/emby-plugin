@@ -72,7 +72,7 @@ namespace TheIntroDB.Services
 
             if (!preview)
             {
-                plugin.EnsureConfigurationInitialized();
+                plugin.InitConfig();
             }
 
             var config = plugin.Configuration;
@@ -94,7 +94,7 @@ namespace TheIntroDB.Services
 
             if (config.IgnoreMediaWithExistingSegments)
             {
-                var knownIds = _repository.GetAllSegmentedItemIds();
+                var knownIds = _repository.GetSegmentedIds();
                 var knownSet = new HashSet<long>(knownIds);
 
                 itemsToScan = items
@@ -111,7 +111,7 @@ namespace TheIntroDB.Services
                 itemsToScan = items;
             }
 
-            itemsToScan = OrderItemsForScan(itemsToScan, _repository.GetLastCheckedUtcByItemId());
+            itemsToScan = OrderItemsForScan(itemsToScan, _repository.GetLastCheckedUtc());
 
             var totalSegments = cachedSegmentCount;
             var processed = 0;
@@ -133,7 +133,7 @@ namespace TheIntroDB.Services
                 {
                     if (!preview)
                     {
-                        plugin.EnsureConfigurationInitialized();
+                        plugin.InitConfig();
                     }
                     config = plugin.Configuration;
                     requestedTypes = GetRequestedTypes(config);
@@ -178,7 +178,7 @@ namespace TheIntroDB.Services
                         }
 
                         rateLimitRetries++;
-                        await WaitForRateLimitExpiryAsync(cancellationToken).ConfigureAwait(false);
+                        await WaitForRateLimitAsync(cancellationToken).ConfigureAwait(false);
                     }
 
                     if (stopScan)
@@ -274,7 +274,7 @@ namespace TheIntroDB.Services
                 .ToList();
         }
 
-        private async Task WaitForRateLimitExpiryAsync(CancellationToken cancellationToken)
+        private async Task WaitForRateLimitAsync(CancellationToken cancellationToken)
         {
             var delay = Plugin.RateLimitExpiryUtc - DateTime.UtcNow;
             if (delay <= TimeSpan.Zero)
@@ -312,7 +312,7 @@ namespace TheIntroDB.Services
                 : raw.Replace("-", string.Empty).Trim();
         }
 
-        private BaseItem ResolveItemByConfiguredId(string configuredId)
+        private BaseItem ResolveItemById(string configuredId)
         {
             if (string.IsNullOrWhiteSpace(configuredId))
             {
@@ -394,7 +394,7 @@ namespace TheIntroDB.Services
             return false;
         }
 
-        private BaseItem[] GetItemsScopedToSelectedLibraries(
+        private BaseItem[] GetScopedItems(
             List<string> selectedLibraryIds,
             HashSet<long> resolvedLibraryInternalIds)
         {
@@ -478,7 +478,7 @@ namespace TheIntroDB.Services
                         resolvedLibraryInternalIds.Add(internalId);
                     }
 
-                    var resolvedLibrary = ResolveItemByConfiguredId(selectedLibraryId);
+                    var resolvedLibrary = ResolveItemById(selectedLibraryId);
                     if (resolvedLibrary != null)
                     {
                         resolvedLibraryInternalIds.Add(resolvedLibrary.InternalId);
@@ -492,7 +492,7 @@ namespace TheIntroDB.Services
             }
 
             var libraryScopedItems = hasLibraryFilter
-                ? GetItemsScopedToSelectedLibraries(selectedLibraryIds, resolvedLibraryInternalIds)
+                ? GetScopedItems(selectedLibraryIds, resolvedLibraryInternalIds)
                 : Array.Empty<BaseItem>();
 
             if (hasLibraryFilter && !hasShowFilter && libraryScopedItems.Length > 0)

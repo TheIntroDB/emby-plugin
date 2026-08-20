@@ -51,7 +51,7 @@ namespace TheIntroDB.Api
                 var delay = waitUntil - DateTime.UtcNow;
                 if (delay > TimeSpan.Zero)
                 {
-                    delay = ClampRateLimitDelay(delay);
+                    delay = ClampRateLimit(delay);
                     _logger.Warn(
                         "TheIntroDB API rate limit is currently active. Waiting {0}s until {1} UTC to retry...",
                         (int)delay.TotalSeconds, waitUntil);
@@ -287,7 +287,7 @@ namespace TheIntroDB.Api
         {
             if (trackUsage)
             {
-                Plugin.TrackAnonymousUsageEvent(eventName, properties);
+                Plugin.TrackUsage(eventName, properties);
             }
         }
 
@@ -300,7 +300,7 @@ namespace TheIntroDB.Api
                 int usageResetSeconds;
                 if (int.TryParse(usageResetValue, out usageResetSeconds))
                 {
-                    return ClampRetryAfterSeconds(usageResetSeconds);
+                    return ClampRetryAfter(usageResetSeconds);
                 }
             }
 
@@ -311,30 +311,30 @@ namespace TheIntroDB.Api
                 int rateResetSeconds;
                 if (int.TryParse(rateResetValue, out rateResetSeconds))
                 {
-                    return ClampRetryAfterSeconds(rateResetSeconds);
+                    return ClampRetryAfter(rateResetSeconds);
                 }
             }
 
             if (headers.RetryAfter != null && headers.RetryAfter.Delta.HasValue)
             {
-                return ClampRetryAfterSeconds((int)headers.RetryAfter.Delta.Value.TotalSeconds);
+                return ClampRetryAfter((int)headers.RetryAfter.Delta.Value.TotalSeconds);
             }
 
             if (headers.RetryAfter != null && headers.RetryAfter.Date.HasValue)
             {
-                return ClampRetryAfterSeconds((int)Math.Ceiling(
+                return ClampRetryAfter((int)Math.Ceiling(
                     (headers.RetryAfter.Date.Value.UtcDateTime - DateTime.UtcNow).TotalSeconds));
             }
 
             return (int)MaxRateLimitDelay.TotalSeconds;
         }
 
-        private static int ClampRetryAfterSeconds(int seconds)
+        private static int ClampRetryAfter(int seconds)
         {
             return Math.Max(1, Math.Min(seconds, (int)MaxRateLimitDelay.TotalSeconds));
         }
 
-        private static TimeSpan ClampRateLimitDelay(TimeSpan delay)
+        private static TimeSpan ClampRateLimit(TimeSpan delay)
         {
             return delay > MaxRateLimitDelay ? MaxRateLimitDelay : delay;
         }

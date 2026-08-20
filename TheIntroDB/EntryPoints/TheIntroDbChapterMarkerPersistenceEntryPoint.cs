@@ -58,12 +58,12 @@ namespace TheIntroDB.EntryPoints
             // One-time pass (no API requests): claims markers written by pre-token
             // releases into the ownership ledger so ReplaceExistingMarkers can
             // manage them without forcing users to re-scan the library.
-            _ = TrackTaskAsync(RunLegacyMarkerAdoptionAsync(_cts.Token));
+            _ = TrackTaskAsync(RunLegacyAdoption(_cts.Token));
 
             // Background marker-repair pass: restores TheIntroDB markers that Emby
             // may have overwritten (e.g. placeholder chapters regenerated for files
             // without embedded chapters). Runs on a configurable interval.
-            _ = TrackTaskAsync(RunMarkerRepairLoopAsync(_cts.Token));
+            _ = TrackTaskAsync(RunRepairLoop(_cts.Token));
         }
 
         /// <summary>
@@ -73,7 +73,7 @@ namespace TheIntroDB.EntryPoints
         /// completion flag so later restarts skip it. Retried on the next start
         /// when any item failed, since adoption is idempotent.
         /// </summary>
-        private async Task RunLegacyMarkerAdoptionAsync(CancellationToken cancellationToken)
+        private async Task RunLegacyAdoption(CancellationToken cancellationToken)
         {
             try
             {
@@ -95,7 +95,7 @@ namespace TheIntroDB.EntryPoints
                     return;
                 }
 
-                var segmentedIds = new HashSet<long>(_segmentRepository.GetAllSegmentedItemIds());
+                var segmentedIds = new HashSet<long>(_segmentRepository.GetSegmentedIds());
                 if (segmentedIds.Count == 0)
                 {
                     MarkAdoptionComplete(plugin, config, 0, 0, 0);
@@ -255,7 +255,7 @@ namespace TheIntroDB.EntryPoints
                 // Also trigger on-demand fetch for updated items that have no segments yet
                 _ = TrackTaskAsync(OnDemandFetchAsync(item, "item_updated", _cts.Token));
 
-                _ = TrackTaskAsync(Task.Run(() => EnsureMarkersApplied(item, config), _cts.Token));
+                _ = TrackTaskAsync(Task.Run(() => ApplyMarkers(item, config), _cts.Token));
             }
             catch (Exception ex)
             {
@@ -268,7 +268,7 @@ namespace TheIntroDB.EntryPoints
         /// markers were (re)written, false when nothing was needed or the item
         /// was skipped (already processing, no segments, or markers present).
         /// </summary>
-        private bool EnsureMarkersApplied(BaseItem item, PluginConfiguration config)
+        private bool ApplyMarkers(BaseItem item, PluginConfiguration config)
         {
             var internalId = item.InternalId;
             if (!_writesInProgress.TryAdd(internalId, 0))
@@ -311,7 +311,7 @@ namespace TheIntroDB.EntryPoints
         /// embedded chapters). Only touches items whose markers are missing, so it
         /// is cheap for healthy libraries.
         /// </summary>
-        private async Task RunMarkerRepairLoopAsync(CancellationToken cancellationToken)
+        private async Task RunRepairLoop(CancellationToken cancellationToken)
         {
             var intervalHours = Plugin.Instance?.Configuration?.MarkerRepairIntervalHours ?? 0;
             if (intervalHours <= 0)
@@ -338,7 +338,7 @@ namespace TheIntroDB.EntryPoints
                     var config = Plugin.Instance?.Configuration;
                     if (config != null && config.MarkerRepairIntervalHours > 0)
                     {
-                        await RepairWipedMarkersAsync(config, cancellationToken).ConfigureAwait(false);
+                        await RepairWiped(config, cancellationToken).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException)
@@ -368,9 +368,9 @@ namespace TheIntroDB.EntryPoints
             }
         }
 
-        private Task RepairWipedMarkersAsync(PluginConfiguration config, CancellationToken cancellationToken)
+        private Task RepairWiped(PluginConfiguration config, CancellationToken cancellationToken)
         {
-            var segmentedIds = new HashSet<long>(_segmentRepository.GetAllSegmentedItemIds());
+            var segmentedIds = new HashSet<long>(_segmentRepository.GetSegmentedIds());
             if (segmentedIds.Count == 0)
             {
                 _logger.Debug("TheIntroDB marker repair: no items with stored segments, skipping");
@@ -399,7 +399,7 @@ namespace TheIntroDB.EntryPoints
                 }
 
                 checkedItems++;
-                if (EnsureMarkersApplied(item, config))
+                if (ApplyMarkers(item, config))
                 {
                     repaired++;
                 }
@@ -443,7 +443,7 @@ namespace TheIntroDB.EntryPoints
 
                 if (!hasRecap)
                 {
-                    if ((IsDurablyOwnedChapter(c, ownedChapters) &&
+                    if ((IsOwnedChapter(c, ownedChapters) &&
                         (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap") ||
                          ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap End") ||
                          ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Recap" + ChapterMarkerPolicy.TheIntroDbTag) ||
@@ -457,7 +457,7 @@ namespace TheIntroDB.EntryPoints
 
                 if (!hasPreview)
                 {
-                    if ((IsDurablyOwnedChapter(c, ownedChapters) &&
+                    if ((IsOwnedChapter(c, ownedChapters) &&
                         (ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview") ||
                          ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview End") ||
                          ChapterMarkerPolicy.HasOwnedLabel(c.Name, "Preview" + ChapterMarkerPolicy.TheIntroDbTag) ||
@@ -478,7 +478,7 @@ namespace TheIntroDB.EntryPoints
             return !(hasIntro && hasRecap && hasCredits && hasPreview);
         }
 
-        private static bool IsDurablyOwnedChapter(
+        private static bool IsOwnedChapter(
             ChapterInfo chapter,
             IReadOnlyList<OwnedChapterMarker> ownedChapters)
         {
@@ -507,7 +507,7 @@ namespace TheIntroDB.EntryPoints
 
                 var internalId = item.InternalId;
 
-                // Gate with the same writesInProgress used by EnsureMarkersApplied to
+                // Gate with the same writesInProgress used by ApplyMarkers to
                 // prevent duplicate concurrent processing of the same item
                 if (!_writesInProgress.TryAdd(internalId, 0))
                 {

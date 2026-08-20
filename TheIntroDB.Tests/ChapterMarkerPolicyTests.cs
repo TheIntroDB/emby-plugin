@@ -9,7 +9,7 @@ namespace TheIntroDB.Tests
     public class ChapterMarkerPolicyTests
     {
         [Fact]
-        public void PartialNativeIntroMarkerIsProtected()
+        public void NativeIntroMarkerProtected()
         {
             var chapters = new List<ChapterInfo>
             {
@@ -20,7 +20,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void TaggedCompanionCannotDisqualifyAnExistingIntroMarker()
+        public void TaggedCannotDisqualifyExistingIntro()
         {
             var chapters = new List<ChapterInfo>
             {
@@ -32,7 +32,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void TaggedCompanionCannotDisqualifyAnExistingCreditsMarker()
+        public void TaggedCannotDisqualifyExistingCredits()
         {
             var chapters = new List<ChapterInfo>
             {
@@ -44,7 +44,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void NativeCreditsMarkerIsProtected()
+        public void NativeCreditsProtected()
         {
             var chapters = new List<ChapterInfo>
             {
@@ -55,7 +55,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void SafeOperationalDefaultsAreEnabled()
+        public void DefaultsAreEnabled()
         {
             var config = new PluginConfiguration();
 
@@ -69,7 +69,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void OwnershipTokenMustMatchExactly()
+        public void OwnershipTokenExactMatch()
         {
             const string token = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
             var name = ChapterMarkerPolicy.AddOwnershipToken("Intro", token);

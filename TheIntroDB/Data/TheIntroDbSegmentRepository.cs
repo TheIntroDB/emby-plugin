@@ -110,11 +110,11 @@ namespace TheIntroDB.Data
                 return true;
             }
 
-            var stored = GetStoredSegmentTypes(itemInternalId);
+            var stored = GetStoredTypes(itemInternalId);
             return types.All(stored.Contains);
         }
 
-        public HashSet<MediaSegmentType> GetStoredSegmentTypes(long itemInternalId)
+        public HashSet<MediaSegmentType> GetStoredTypes(long itemInternalId)
         {
             _lock.EnterReadLock();
             try
@@ -193,7 +193,7 @@ namespace TheIntroDB.Data
         /// Used to pre-filter items before a scan when
         /// IgnoreMediaWithExistingSegments is enabled.
         /// </summary>
-        public IReadOnlyList<long> GetAllSegmentedItemIds()
+        public IReadOnlyList<long> GetSegmentedIds()
         {
             _lock.EnterReadLock();
             try
@@ -224,7 +224,7 @@ namespace TheIntroDB.Data
             }
         }
 
-        public IReadOnlyDictionary<long, DateTime> GetLastCheckedUtcByItemId()
+        public IReadOnlyDictionary<long, DateTime> GetLastCheckedUtc()
         {
             _lock.EnterReadLock();
             try

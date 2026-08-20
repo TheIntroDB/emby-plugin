@@ -54,12 +54,12 @@ namespace TheIntroDB.EntryPoints
                 {
                     try
                     {
-                        Plugin.TrackAnonymousUsagePluginLoaded();
+                        Plugin.TrackPluginLoaded();
                         return;
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error("TrackAnonymousUsagePluginLoaded attempt {0}/5 failed: {1}", attempt + 1, ex.Message);
+                        _logger.Error("TrackPluginLoaded attempt {0}/5 failed: {1}", attempt + 1, ex.Message);
                         await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
                     }
                 }
@@ -177,7 +177,7 @@ namespace TheIntroDB.EntryPoints
                 state.LastReportedUtc = DateTime.UtcNow;
 
                 var config = Plugin.Instance == null ? null : Plugin.Instance.Configuration;
-                Plugin.TrackAnonymousUsageEvent(
+                Plugin.TrackUsage(
                     "segment_skipped",
                     new Dictionary<string, object>
                     {

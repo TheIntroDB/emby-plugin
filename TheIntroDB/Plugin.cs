@@ -36,7 +36,7 @@ namespace TheIntroDB
 
         internal static DateTime RateLimitExpiryUtc { get; set; }
 
-        internal void EnsureConfigurationInitialized()
+        internal void InitConfig()
         {
             PluginConfiguration config;
             try
@@ -92,7 +92,7 @@ namespace TheIntroDB
             }
         }
 
-        internal static void TrackAnonymousUsageEvent(string eventName, Dictionary<string, object> props)
+        internal static void TrackUsage(string eventName, Dictionary<string, object> props)
         {
             var instance = Instance;
             if (instance == null)
@@ -103,7 +103,7 @@ namespace TheIntroDB
             AnonymousUsageReporter.TrackEvent(instance, instance._logger, eventName, props);
         }
 
-        internal static void TrackAnonymousUsagePluginLoaded()
+        internal static void TrackPluginLoaded()
         {
             var instance = Instance;
             if (instance == null)
@@ -113,11 +113,11 @@ namespace TheIntroDB
 
             try
             {
-                instance.EnsureConfigurationInitialized();
+                instance.InitConfig();
             }
             catch (Exception ex)
             {
-                instance._logger.Error("EnsureConfigurationInitialized failed before tracking: {0}", ex.Message);
+                instance._logger.Error("InitConfig failed before tracking: {0}", ex.Message);
             }
 
             try

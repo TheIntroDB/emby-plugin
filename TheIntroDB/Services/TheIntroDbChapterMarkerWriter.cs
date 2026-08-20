@@ -131,10 +131,10 @@ namespace TheIntroDB.Services
 
             if (removed == 0 && added == 0)
             {
-                if (!preview && !OwnedChapterListsEqual(storedOwned, owned))
+                if (!preview && !OwnedChaptersEqual(storedOwned, owned))
                 {
                     _segmentRepository.ReplaceOwnedChapters(item.InternalId,
-                        DeduplicateOwnedChapters(owned), DateTime.UtcNow);
+                        DedupOwnedChapters(owned), DateTime.UtcNow);
                 }
 
                 _logger.Debug("TheIntroDB chapters unchanged for {0} ({1})",
@@ -157,7 +157,7 @@ namespace TheIntroDB.Services
                 .ToList();
             _itemRepository.SaveChapters(item.InternalId, updatedChapters);
             _segmentRepository.ReplaceOwnedChapters(item.InternalId,
-                DeduplicateOwnedChapters(owned), DateTime.UtcNow);
+                DedupOwnedChapters(owned), DateTime.UtcNow);
             _logger.Debug("TheIntroDB saved {0} chapters/markers for {1} ({2})",
               updatedChapters.Count, item.Name, item.InternalId);
 
@@ -266,7 +266,7 @@ namespace TheIntroDB.Services
                 (chapter.OwnerToken ?? string.Empty);
         }
 
-        private static IReadOnlyList<OwnedChapterMarker> DeduplicateOwnedChapters(
+        private static IReadOnlyList<OwnedChapterMarker> DedupOwnedChapters(
           IEnumerable<OwnedChapterMarker> chapters)
         {
             var result = new List<OwnedChapterMarker>();
@@ -282,7 +282,7 @@ namespace TheIntroDB.Services
             return result;
         }
 
-        private static bool OwnedChapterListsEqual(
+        private static bool OwnedChaptersEqual(
           IEnumerable<OwnedChapterMarker> a, IEnumerable<OwnedChapterMarker> b)
         {
             var left = new HashSet<string>(a.Select(OwnedChapterKey), StringComparer.Ordinal);

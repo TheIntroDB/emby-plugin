@@ -32,7 +32,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void AdoptItemRenamesLegacyPairAndWritesLedgerRows()
+        public void AdoptRenamesLegacyPairWritesLedger()
         {
             var existing = new List<ChapterInfo>
             {
@@ -83,7 +83,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void AdoptItemSkipsBareMarkersWithoutTaggedCompanion()
+        public void AdoptSkipsBareMarkersNoTagged()
         {
             var existing = new List<ChapterInfo>
             {
@@ -107,7 +107,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void AdoptItemPreservesForeignChaptersAndPairsLogicalMarkers()
+        public void AdoptPreservesForeignPairsLogical()
         {
             var existing = new List<ChapterInfo>
             {
@@ -142,7 +142,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void AdoptItemIsIdempotent()
+        public void AdoptIsIdempotent()
         {
             var original = new List<ChapterInfo>
             {
@@ -170,7 +170,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void AdoptItemMergesExistingOwnedRows()
+        public void AdoptMergesOwnedRows()
         {
             const string existingToken = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
             var existingOwned = new OwnedChapterMarker
@@ -205,7 +205,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void NeedsMarkerApplyAcceptsLegacyTaggedRecapAndPreview()
+        public void NeedsMarkerApplyAcceptsLegacyTagged()
         {
             var recapConfig = new PluginConfiguration
             {

@@ -26,7 +26,7 @@ namespace TheIntroDB.Tests
     public class ScanSafetyTests
     {
         [Fact]
-        public void LookupBudgetEnforcesExactLimit()
+        public void BudgetEnforcesExactLimit()
         {
             var budget = new ScanLookupBudget(2);
 
@@ -37,7 +37,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void LookupBudgetCountsRateLimitRetryAgainstConfiguredLimit()
+        public void RateLimitRetryCountsAgainstBudget()
         {
             var budget = new ScanLookupBudget(2);
 
@@ -49,7 +49,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void RateLimitRetryPolicyAllowsOnlyTwoRetries()
+        public void RateLimitAllowsOnlyTwoRetries()
         {
             var method = typeof(TheIntroDbLibraryScanner).GetMethod(
                 "CanRetryAfterRateLimit",
@@ -62,7 +62,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void ProviderRetryAfterIsClampedBeforeRetrying()
+        public void RetryAfterIsClamped()
         {
             var method = typeof(TheIntroDB.Api.TheIntroDbClient).GetMethod(
                 "GetRetryAfterSeconds",
@@ -77,7 +77,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void LookupHistoryMakesRepeatedBoundedScansAdvancePastEmptyResults()
+        public void LookupHistorySkipsEmptyResults()
         {
             var now = DateTime.UtcNow;
             var lastChecked = new Dictionary<long, DateTime>();
@@ -100,7 +100,7 @@ namespace TheIntroDB.Tests
 
         [Theory]
         [MemberData(nameof(IncompleteLookupResults))]
-        public void IncompleteOrUnattemptedLookupsAreNotEligibleForHistory(SegmentFetchResult result)
+        public void IncompleteLookupsExcludedFromHistory(SegmentFetchResult result)
         {
             Assert.False(result.IsLookupCompleted);
         }
@@ -113,7 +113,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void RequestPacingKeepsThirtyStartsOutsideTenSecondWindow()
+        public void RequestPacingRespectsTenSecondWindow()
         {
             var field = typeof(TheIntroDB.Api.TheIntroDbClient).GetField(
                 "MinDelayBetweenRequests",
@@ -161,7 +161,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void TaggedTimestampCollisionNeverRemovesOrChangesExistingIntroMarker()
+        public void TaggedCollisionPreservesExistingIntro()
         {
             var existing = new List<ChapterInfo>
             {
@@ -201,12 +201,12 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void PreviewSegmentRepositoryDelegatesReadsAndNeverPersistsData()
+        public void PreviewRepoDelegatesReadsNeverPersists()
         {
             var backing = new Mock<ITheIntroDbSegmentRepository>();
-            backing.Setup(r => r.GetAllSegmentedItemIds()).Returns(new long[] { 42L });
-            backing.Setup(r => r.GetLastCheckedUtcByItemId()).Returns(new Dictionary<long, DateTime> { [42L] = DateTime.UtcNow });
-            backing.Setup(r => r.GetStoredSegmentTypes(42L)).Returns(new HashSet<MediaSegmentType> { MediaSegmentType.Intro });
+            backing.Setup(r => r.GetSegmentedIds()).Returns(new long[] { 42L });
+            backing.Setup(r => r.GetLastCheckedUtc()).Returns(new Dictionary<long, DateTime> { [42L] = DateTime.UtcNow });
+            backing.Setup(r => r.GetStoredTypes(42L)).Returns(new HashSet<MediaSegmentType> { MediaSegmentType.Intro });
             backing.Setup(r => r.HasAllSegmentTypes(42L, It.IsAny<IReadOnlyCollection<MediaSegmentType>>())).Returns(true);
             backing.Setup(r => r.GetSegments(42L)).Returns(new[]
             {
@@ -218,9 +218,9 @@ namespace TheIntroDB.Tests
             });
             var repository = new PreviewSegmentRepository(backing.Object);
 
-            Assert.Equal(new long[] { 42L }, repository.GetAllSegmentedItemIds());
-            Assert.Contains(42L, repository.GetLastCheckedUtcByItemId().Keys);
-            Assert.Contains(MediaSegmentType.Intro, repository.GetStoredSegmentTypes(42L));
+            Assert.Equal(new long[] { 42L }, repository.GetSegmentedIds());
+            Assert.Contains(42L, repository.GetLastCheckedUtc().Keys);
+            Assert.Contains(MediaSegmentType.Intro, repository.GetStoredTypes(42L));
             Assert.True(repository.HasAllSegmentTypes(42L, new[] { MediaSegmentType.Intro }));
             Assert.Single(repository.GetSegments(42L));
             Assert.Single(repository.GetOwnedChapters(42L));
@@ -233,7 +233,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void ReadOnlyRepositoryWithMissingDatabaseReturnsEmptyWithoutCreatingFiles()
+        public void MissingDbReturnsEmptyNoFiles()
         {
             var root = Path.Combine(Path.GetTempPath(), "theintrodb-preview-" + Guid.NewGuid().ToString("N"));
             var paths = new Mock<IApplicationPaths>();
@@ -242,8 +242,8 @@ namespace TheIntroDB.Tests
             using (var repository = new TheIntroDbSegmentRepository(Mock.Of<ILogger>(), paths.Object, true))
             using (repository.BeginReadOnlySession(CancellationToken.None))
             {
-                Assert.Empty(repository.GetAllSegmentedItemIds());
-                Assert.Empty(repository.GetStoredSegmentTypes(42L));
+                Assert.Empty(repository.GetSegmentedIds());
+                Assert.Empty(repository.GetStoredTypes(42L));
                 Assert.Empty(repository.GetSegments(42L));
                 Assert.Empty(repository.GetOwnedChapters(42L));
                 Assert.Throws<InvalidOperationException>(() => repository.ReplaceSegments(42L, Array.Empty<StoredMediaSegment>(), DateTime.UtcNow));
@@ -255,7 +255,7 @@ namespace TheIntroDB.Tests
 
 
         [Fact]
-        public void ReplaceExistingMarkersRemovesOnlyDurablyOwnedChapters()
+        public void ReplaceMarkersRemovesOnlyOwnedChapters()
         {
             const string startToken = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
             const string companionToken = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -307,7 +307,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void ForeignNativeIntroBlocksReplacementAdditionsAndIsPreserved()
+        public void ForeignNativeIntroBlocksReplacement()
         {
             var existing = new List<ChapterInfo>
             {
@@ -364,7 +364,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void OneLedgerEntryRemovesAtMostOneIdenticalChapter()
+        public void LedgerEntryRemovesOneChapter()
         {
             const string token = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
             var name = ChapterMarkerPolicy.AddOwnershipToken("Intro", token);
@@ -408,7 +408,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void FailedOwnershipWriteLeavesSavedChapterUnclaimed()
+        public void FailedOwnershipWriteLeavesUnclaimed()
         {
             var itemRepository = new Mock<IItemRepository>();
             itemRepository.Setup(repository => repository.GetChapters(It.IsAny<MediaBrowser.Controller.Entities.BaseItem>()))
@@ -433,7 +433,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void FailedChapterSaveNeverPersistsOwnership()
+        public void FailedChapterSaveNoOwnership()
         {
             var itemRepository = new Mock<IItemRepository>();
             itemRepository.Setup(repository => repository.GetChapters(It.IsAny<MediaBrowser.Controller.Entities.BaseItem>()))
@@ -454,7 +454,7 @@ namespace TheIntroDB.Tests
 
 
         [Fact]
-        public void ExistingForeignDuplicatesAreNeverDeduplicated()
+        public void ForeignDuplicatesNotDeduplicated()
         {
             var duplicateA = Chapter(MarkerType.Chapter, 50L, "Manual chapter");
             var duplicateB = Chapter(MarkerType.Chapter, 50L, "Manual chapter");
@@ -478,7 +478,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void RepairRecognizesOnlyDurablyOwnedOrLegacyTaggedRecap()
+        public void RepairOnlyRecognizesOwnedOrLegacyTagged()
         {
             const string token = "ffffffffffffffffffffffffffffffff";
             var name = ChapterMarkerPolicy.AddOwnershipToken("Recap" + ChapterMarkerPolicy.TheIntroDbTag, token);
