@@ -224,6 +224,39 @@ namespace TheIntroDB.Data
             }
         }
 
+        public IReadOnlyDictionary<long, DateTime> GetLastCheckedUtcByItemId()
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                var lastChecked = new Dictionary<long, DateTime>();
+                var db = GetConnection();
+                if (db == null || !TableHasColumn(db, "MediaLookupHistory", "LastCheckedUtcTicks"))
+                {
+                    return lastChecked;
+                }
+
+                using (var stmt = db.PrepareStatement("SELECT ItemInternalId, LastCheckedUtcTicks FROM MediaLookupHistory"))
+                {
+                    while (stmt.MoveNext())
+                    {
+                        var row = stmt.Current;
+                        var ticks = row.GetInt64(1);
+                        if (ticks >= DateTime.MinValue.Ticks && ticks <= DateTime.MaxValue.Ticks)
+                        {
+                            lastChecked[row.GetInt64(0)] = new DateTime(ticks, DateTimeKind.Utc);
+                        }
+                    }
+                }
+
+                return lastChecked;
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+
         public void ReplaceSegments(long itemInternalId, IReadOnlyList<StoredMediaSegment> segments, DateTime updatedUtc)
         {
             EnsureWritable();
@@ -239,6 +272,14 @@ namespace TheIntroDB.Data
                     {
                         BindInt64(delete, "@ItemInternalId", itemInternalId);
                         delete.MoveNext();
+                    }
+
+                    using (var updateLookup = db.PrepareStatement(
+                               "INSERT OR REPLACE INTO MediaLookupHistory (ItemInternalId, LastCheckedUtcTicks) VALUES (@ItemInternalId, @LastCheckedUtcTicks)"))
+                    {
+                        BindInt64(updateLookup, "@ItemInternalId", itemInternalId);
+                        BindInt64(updateLookup, "@LastCheckedUtcTicks", updatedUtc.ToUniversalTime().Ticks);
+                        updateLookup.MoveNext();
                     }
 
                     if (segments != null && segments.Count > 0)
@@ -382,6 +423,10 @@ namespace TheIntroDB.Data
                     "PRIMARY KEY (ItemInternalId, SegmentType, StartTicks, EndTicks)" +
                     ")",
                     "CREATE INDEX IF NOT EXISTS idx_MediaSegments_ItemInternalId ON MediaSegments(ItemInternalId)",
+                    "CREATE TABLE IF NOT EXISTS MediaLookupHistory (" +
+                    "ItemInternalId INTEGER NOT NULL PRIMARY KEY," +
+                    "LastCheckedUtcTicks INTEGER NOT NULL" +
+                    ")",
                     CreateOwnedChaptersTableSql,
                     "CREATE INDEX IF NOT EXISTS idx_OwnedChapters_ItemInternalId ON OwnedChapters(ItemInternalId)"
                 ));

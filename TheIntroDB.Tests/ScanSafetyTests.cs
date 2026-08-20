@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Threading;
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Entities;
@@ -14,6 +17,7 @@ using TheIntroDB.Configuration;
 using TheIntroDB.Data;
 using TheIntroDB.EntryPoints;
 using TheIntroDB.Models;
+using TheIntroDB.Providers;
 using TheIntroDB.Services;
 using Xunit;
 
@@ -33,16 +37,79 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void LookupBudgetStopsImmediatelyAfterRateLimit()
+        public void LookupBudgetCountsRateLimitRetryAgainstConfiguredLimit()
         {
-            var budget = new ScanLookupBudget(10);
+            var budget = new ScanLookupBudget(2);
 
+            // The retry request must consume the same bounded lookup budget.
             Assert.True(budget.TryBeginLookup());
-            budget.StopAfterRateLimit();
-
-            Assert.True(budget.IsRateLimited);
+            Assert.True(budget.TryBeginLookup());
             Assert.False(budget.TryBeginLookup());
-            Assert.Equal(1, budget.Used);
+            Assert.Equal(2, budget.Used);
+        }
+
+        [Fact]
+        public void RateLimitRetryPolicyAllowsOnlyTwoRetries()
+        {
+            var method = typeof(TheIntroDbLibraryScanner).GetMethod(
+                "CanRetryAfterRateLimit",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            Assert.True(Assert.IsType<bool>(method.Invoke(null, new object[] { 0 })));
+            Assert.True(Assert.IsType<bool>(method.Invoke(null, new object[] { 1 })));
+            Assert.False(Assert.IsType<bool>(method.Invoke(null, new object[] { 2 })));
+        }
+
+        [Fact]
+        public void ProviderRetryAfterIsClampedBeforeRetrying()
+        {
+            var method = typeof(TheIntroDB.Api.TheIntroDbClient).GetMethod(
+                "GetRetryAfterSeconds",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            using (var response = new HttpResponseMessage())
+            {
+                response.Headers.Add("X-UsageLimit-Reset", "999999");
+                Assert.Equal(300, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers })));
+            }
+        }
+
+        [Fact]
+        public void LookupHistoryMakesRepeatedBoundedScansAdvancePastEmptyResults()
+        {
+            var now = DateTime.UtcNow;
+            var lastChecked = new Dictionary<long, DateTime>();
+            var items = new BaseItem[]
+            {
+                Movie(10L), Movie(20L), Movie(30L), Movie(40L)
+            };
+
+            var firstRun = OrderForScan(items, lastChecked);
+            Assert.Equal(new long[] { 10L, 20L, 30L, 40L }, firstRun.Select(item => item.InternalId));
+
+            // A completed 404 has no segments, but must still advance the durable history.
+            Assert.True(SegmentFetchResult.NotFound().IsLookupCompleted);
+            lastChecked[10L] = now;
+            lastChecked[20L] = now.AddTicks(1);
+
+            var secondRun = OrderForScan(items.Reverse().ToArray(), lastChecked);
+            Assert.Equal(new long[] { 30L, 40L, 10L, 20L }, secondRun.Select(item => item.InternalId));
+        }
+
+        [Theory]
+        [MemberData(nameof(IncompleteLookupResults))]
+        public void IncompleteOrUnattemptedLookupsAreNotEligibleForHistory(SegmentFetchResult result)
+        {
+            Assert.False(result.IsLookupCompleted);
+        }
+
+        public static IEnumerable<object[]> IncompleteLookupResults()
+        {
+            yield return new object[] { SegmentFetchResult.NotAttempted() };
+            yield return new object[] { SegmentFetchResult.Error() };
+            yield return new object[] { SegmentFetchResult.RateLimited() };
         }
 
         [Fact]
@@ -138,6 +205,7 @@ namespace TheIntroDB.Tests
         {
             var backing = new Mock<ITheIntroDbSegmentRepository>();
             backing.Setup(r => r.GetAllSegmentedItemIds()).Returns(new long[] { 42L });
+            backing.Setup(r => r.GetLastCheckedUtcByItemId()).Returns(new Dictionary<long, DateTime> { [42L] = DateTime.UtcNow });
             backing.Setup(r => r.GetStoredSegmentTypes(42L)).Returns(new HashSet<MediaSegmentType> { MediaSegmentType.Intro });
             backing.Setup(r => r.HasAllSegmentTypes(42L, It.IsAny<IReadOnlyCollection<MediaSegmentType>>())).Returns(true);
             backing.Setup(r => r.GetSegments(42L)).Returns(new[]
@@ -151,6 +219,7 @@ namespace TheIntroDB.Tests
             var repository = new PreviewSegmentRepository(backing.Object);
 
             Assert.Equal(new long[] { 42L }, repository.GetAllSegmentedItemIds());
+            Assert.Contains(42L, repository.GetLastCheckedUtcByItemId().Keys);
             Assert.Contains(MediaSegmentType.Intro, repository.GetStoredSegmentTypes(42L));
             Assert.True(repository.HasAllSegmentTypes(42L, new[] { MediaSegmentType.Intro }));
             Assert.Single(repository.GetSegments(42L));
@@ -449,6 +518,25 @@ namespace TheIntroDB.Tests
         private static ChapterInfo Chapter(MarkerType markerType, long ticks, string name)
         {
             return new ChapterInfo { MarkerType = markerType, StartPositionTicks = ticks, Name = name };
+        }
+
+        private static BaseItem[] OrderForScan(BaseItem[] items, IReadOnlyDictionary<long, DateTime> lastChecked)
+        {
+            var method = typeof(TheIntroDbLibraryScanner).GetMethod(
+                "OrderItemsForScan",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+            return Assert.IsType<BaseItem[]>(method.Invoke(null, new object[] { items, lastChecked }));
+        }
+
+        private static Movie Movie(long internalId)
+        {
+            return new Movie
+            {
+                Id = Guid.NewGuid(),
+                InternalId = internalId,
+                Name = "Movie " + internalId
+            };
         }
     }
 }

@@ -18,6 +18,7 @@ namespace TheIntroDB.Api
         private const int MaxRequestsPerWindow = 25;
         private static readonly TimeSpan RateLimitWindow = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan MinDelayBetweenRequests = TimeSpan.FromMilliseconds(RateLimitWindow.TotalMilliseconds / MaxRequestsPerWindow);
+        private static readonly TimeSpan MaxRateLimitDelay = TimeSpan.FromMinutes(5);
 
         private static readonly SemaphoreSlim RateLimitLock = new SemaphoreSlim(1, 1);
         private static DateTime _lastRequestUtc = DateTime.MinValue;
@@ -50,6 +51,7 @@ namespace TheIntroDB.Api
                 var delay = waitUntil - DateTime.UtcNow;
                 if (delay > TimeSpan.Zero)
                 {
+                    delay = ClampRateLimitDelay(delay);
                     _logger.Warn(
                         "TheIntroDB API rate limit is currently active. Waiting {0}s until {1} UTC to retry...",
                         (int)delay.TotalSeconds, waitUntil);
@@ -140,7 +142,7 @@ namespace TheIntroDB.Api
                                 var retryAfterSeconds = GetRetryAfterSeconds(response.Headers);
                                 Plugin.RateLimitExpiryUtc = DateTime.UtcNow.AddSeconds(retryAfterSeconds);
                                 _logger.Warn(
-                                    "TheIntroDB API rate limit exceeded. Retry-after: {0}s. No retry will be attempted.",
+                                    "TheIntroDB API rate limit exceeded. Retry-after: {0}s. The scan may retry within its configured budget.",
                                     retryAfterSeconds);
 
                                 TrackUsage(trackUsage,
@@ -244,6 +246,10 @@ namespace TheIntroDB.Api
                             return MediaFetchResult.Success(mediaResponse);
                         }
                     }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
                     catch (Exception ex)
                     {
                         _logger.ErrorException(string.Format("TheIntroDB API request failed for {0}", requestUri), ex);
@@ -294,7 +300,7 @@ namespace TheIntroDB.Api
                 int usageResetSeconds;
                 if (int.TryParse(usageResetValue, out usageResetSeconds))
                 {
-                    return usageResetSeconds;
+                    return ClampRetryAfterSeconds(usageResetSeconds);
                 }
             }
 
@@ -305,16 +311,32 @@ namespace TheIntroDB.Api
                 int rateResetSeconds;
                 if (int.TryParse(rateResetValue, out rateResetSeconds))
                 {
-                    return rateResetSeconds;
+                    return ClampRetryAfterSeconds(rateResetSeconds);
                 }
             }
 
             if (headers.RetryAfter != null && headers.RetryAfter.Delta.HasValue)
             {
-                return (int)headers.RetryAfter.Delta.Value.TotalSeconds;
+                return ClampRetryAfterSeconds((int)headers.RetryAfter.Delta.Value.TotalSeconds);
             }
 
-            return 300;
+            if (headers.RetryAfter != null && headers.RetryAfter.Date.HasValue)
+            {
+                return ClampRetryAfterSeconds((int)Math.Ceiling(
+                    (headers.RetryAfter.Date.Value.UtcDateTime - DateTime.UtcNow).TotalSeconds));
+            }
+
+            return (int)MaxRateLimitDelay.TotalSeconds;
+        }
+
+        private static int ClampRetryAfterSeconds(int seconds)
+        {
+            return Math.Max(1, Math.Min(seconds, (int)MaxRateLimitDelay.TotalSeconds));
+        }
+
+        private static TimeSpan ClampRateLimitDelay(TimeSpan delay)
+        {
+            return delay > MaxRateLimitDelay ? MaxRateLimitDelay : delay;
         }
 
         private static async Task WaitForRateLimitAsync(CancellationToken cancellationToken)

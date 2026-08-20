@@ -10,6 +10,7 @@ namespace TheIntroDB.Data
         HashSet<MediaSegmentType> GetStoredSegmentTypes(long itemInternalId);
         IReadOnlyList<StoredMediaSegment> GetSegments(long itemInternalId);
         IReadOnlyList<long> GetAllSegmentedItemIds();
+        IReadOnlyDictionary<long, DateTime> GetLastCheckedUtcByItemId();
         void ReplaceSegments(long itemInternalId, IReadOnlyList<StoredMediaSegment> segments, DateTime updatedUtc);
         IReadOnlyList<OwnedChapterMarker> GetOwnedChapters(long itemInternalId);
         void ReplaceOwnedChapters(long itemInternalId, IReadOnlyList<OwnedChapterMarker> chapters, DateTime updatedUtc);
@@ -35,6 +36,9 @@ namespace TheIntroDB.Data
 
         public IReadOnlyList<long> GetAllSegmentedItemIds()
             => _backing.GetAllSegmentedItemIds();
+
+        public IReadOnlyDictionary<long, DateTime> GetLastCheckedUtcByItemId()
+            => _backing.GetLastCheckedUtcByItemId();
 
         public void ReplaceSegments(long itemInternalId, IReadOnlyList<StoredMediaSegment> segments, DateTime updatedUtc)
             => throw new InvalidOperationException("Preview repository is read-only");

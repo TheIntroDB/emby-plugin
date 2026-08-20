@@ -21,6 +21,8 @@ namespace TheIntroDB.Services
     public class TheIntroDbLibraryScanner
     {
         private const int MaxConsecutiveApiFailures = 20;
+        private const int MaxRateLimitRetriesPerItem = 2;
+        private static readonly TimeSpan MaxRateLimitRetryDelay = TimeSpan.FromMinutes(5);
 
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
@@ -109,11 +111,14 @@ namespace TheIntroDB.Services
                 itemsToScan = items;
             }
 
+            itemsToScan = OrderItemsForScan(itemsToScan, _repository.GetLastCheckedUtcByItemId());
+
             var totalSegments = cachedSegmentCount;
             var processed = 0;
             var total = itemsToScan.Length;
             var consecutiveApiFailures = 0;
             var lookupBudget = new ScanLookupBudget(config.MaxLookupsPerRun);
+            var stopScan = false;
 
             for (var i = 0; i < itemsToScan.Length; i++)
             {
@@ -138,24 +143,56 @@ namespace TheIntroDB.Services
                         continue;
                     }
 
-                    if (!lookupBudget.TryBeginLookup())
+                    SegmentFetchResult result = null;
+                    var rateLimitRetries = 0;
+                    while (true)
                     {
-                        _logger.Info("TheIntroDB scan stopped at the configured lookup limit of {0}",
-                            config.MaxLookupsPerRun);
+                        if (!lookupBudget.TryBeginLookup())
+                        {
+                            _logger.Info("TheIntroDB scan stopped at the configured lookup limit of {0}",
+                                config.MaxLookupsPerRun);
+                            stopScan = true;
+                            break;
+                        }
+
+                        result = await _segmentProvider.GetMediaSegmentsAsync(
+                            item.Id, cancellationToken, !preview, !preview).ConfigureAwait(false);
+
+                        if (!result.WasApiAttempted)
+                        {
+                            lookupBudget.CancelLatestLookup();
+                            break;
+                        }
+
+                        if (!result.IsRateLimited)
+                        {
+                            break;
+                        }
+
+                        if (!CanRetryAfterRateLimit(rateLimitRetries))
+                        {
+                            _logger.Warn("TheIntroDB scan stopped after HTTP 429 persisted for {0} retries on {1}.",
+                                MaxRateLimitRetriesPerItem, item.Name);
+                            stopScan = true;
+                            break;
+                        }
+
+                        rateLimitRetries++;
+                        await WaitForRateLimitExpiryAsync(cancellationToken).ConfigureAwait(false);
+                    }
+
+                    if (stopScan)
+                    {
                         break;
                     }
 
-                    var result = await _segmentProvider.GetMediaSegmentsAsync(
-                        item.Id, cancellationToken, !preview, !preview).ConfigureAwait(false);
-
-                    if (result.IsRateLimited)
+                    if (!result.WasApiAttempted)
                     {
-                        lookupBudget.StopAfterRateLimit();
-                        _logger.Warn("TheIntroDB scan stopped after HTTP 429. No further lookups will run in this task.");
-                        break;
+                        processed++;
+                        continue;
                     }
 
-                    if (result.IsError)
+                    if (!result.IsLookupCompleted)
                     {
                         consecutiveApiFailures++;
                         if (consecutiveApiFailures >= MaxConsecutiveApiFailures)
@@ -165,11 +202,11 @@ namespace TheIntroDB.Services
                                 consecutiveApiFailures, itemsToScan.Length - i);
                             break;
                         }
+
+                        continue;
                     }
-                    else
-                    {
-                        consecutiveApiFailures = 0;
-                    }
+
+                    consecutiveApiFailures = 0;
 
                     var storedSegments = result.Segments.Select(s => new StoredMediaSegment
                     {
@@ -197,6 +234,10 @@ namespace TheIntroDB.Services
                             : "Processed {0}: {1} segments fetched, {2} markers added",
                         item.Name, storedSegments.Count, inserted),
                       processed, total);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -231,6 +272,37 @@ namespace TheIntroDB.Services
                 .Select(id => id.Trim())
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .ToList();
+        }
+
+        private async Task WaitForRateLimitExpiryAsync(CancellationToken cancellationToken)
+        {
+            var delay = Plugin.RateLimitExpiryUtc - DateTime.UtcNow;
+            if (delay <= TimeSpan.Zero)
+            {
+                return;
+            }
+
+            delay = delay > MaxRateLimitRetryDelay ? MaxRateLimitRetryDelay : delay;
+            _logger.Warn("TheIntroDB scan waiting {0}s for provider rate limit expiry before retrying the same item.",
+                (int)Math.Ceiling(delay.TotalSeconds));
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static bool CanRetryAfterRateLimit(int retriesCompleted)
+        {
+            return retriesCompleted < MaxRateLimitRetriesPerItem;
+        }
+
+        private static BaseItem[] OrderItemsForScan(
+            IEnumerable<BaseItem> items,
+            IReadOnlyDictionary<long, DateTime> lastCheckedUtcByItemId)
+        {
+            var lastChecked = lastCheckedUtcByItemId ?? new Dictionary<long, DateTime>();
+            return (items ?? Array.Empty<BaseItem>())
+                .OrderBy(item => lastChecked.ContainsKey(item.InternalId) ? 1 : 0)
+                .ThenBy(item => lastChecked.TryGetValue(item.InternalId, out var checkedUtc) ? checkedUtc : DateTime.MinValue)
+                .ThenBy(item => item.InternalId)
+                .ToArray();
         }
 
         private static string NormalizeConfiguredId(string raw)
