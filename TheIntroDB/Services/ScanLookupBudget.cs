@@ -5,7 +5,6 @@ namespace TheIntroDB.Services
     public sealed class ScanLookupBudget
     {
         private readonly int _maximum;
-        private bool _rateLimited;
 
         public ScanLookupBudget(int maximum)
         {
@@ -14,11 +13,9 @@ namespace TheIntroDB.Services
 
         public int Used { get; private set; }
 
-        public bool IsRateLimited => _rateLimited;
-
         public bool TryBeginLookup()
         {
-            if (_rateLimited || Used >= _maximum)
+            if (Used >= _maximum)
             {
                 return false;
             }
@@ -27,9 +24,12 @@ namespace TheIntroDB.Services
             return true;
         }
 
-        public void StopAfterRateLimit()
+        public void CancelLatestLookup()
         {
-            _rateLimited = true;
+            if (Used > 0)
+            {
+                Used--;
+            }
         }
     }
 }

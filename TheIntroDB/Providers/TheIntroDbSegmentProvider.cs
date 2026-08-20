@@ -62,7 +62,7 @@ namespace TheIntroDB.Providers
             if (Plugin.Instance is null)
             {
                 _logger.Warn("Early exit: Plugin.Instance is null");
-                return SegmentFetchResult.NotFound();
+                return SegmentFetchResult.NotAttempted();
             }
 
             if (initializeConfiguration)
@@ -74,14 +74,14 @@ namespace TheIntroDB.Providers
             if (config is null)
             {
                 _logger.Warn("Early exit: Plugin configuration is not available");
-                return SegmentFetchResult.NotFound();
+                return SegmentFetchResult.NotAttempted();
             }
 
             var item = _libraryManager.GetItemById(itemId);
             if (item is null)
             {
                 _logger.Warn("Early exit: item not found for ItemId={0}", itemId);
-                return SegmentFetchResult.NotFound();
+                return SegmentFetchResult.NotAttempted();
             }
 
             int? tmdbId = null;
@@ -126,13 +126,13 @@ namespace TheIntroDB.Providers
                   "(null)" :
                   string.Join(",", item.ProviderIds.Select(kvp => kvp.Key + "=" + kvp.Value));
                 _logger.Warn("Early exit: no TmdbId, TvdbId, or ImdbId for {0}. ProviderIds: {1}", item.Name, providers);
-                return SegmentFetchResult.NotFound();
+                return SegmentFetchResult.NotAttempted();
             }
 
             if (!isMovie && (!season.HasValue || !episode.HasValue))
             {
                 _logger.Warn("Early exit: TV episode missing season/episode for {0}", item.Name);
-                return SegmentFetchResult.NotFound();
+                return SegmentFetchResult.NotAttempted();
             }
 
             _logger.Debug("Segment toggles: EnableIntro={0}, EnableRecap={1}, EnableCredits={2}, EnablePreview={3}, IgnoreMediaWithExistingSegments={4}",
