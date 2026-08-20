@@ -1,5 +1,5 @@
-using Xunit;
 using TheIntroDB.Services;
+using Xunit;
 
 namespace TheIntroDB.Tests
 {
