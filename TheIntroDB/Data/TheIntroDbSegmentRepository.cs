@@ -73,6 +73,7 @@ namespace TheIntroDB.Data
             try
             {
                 ResetConnection();
+                _logger.Debug("TheIntroDB read-only database session opened for {0}", _dbFilePath);
                 return new ReadOnlySession(this);
             }
             catch
@@ -91,6 +92,7 @@ namespace TheIntroDB.Data
             finally
             {
                 DatabaseWriteLock.Release();
+                _logger.Debug("TheIntroDB read-only database session released for {0}", _dbFilePath);
             }
         }
 
@@ -100,6 +102,29 @@ namespace TheIntroDB.Data
             {
                 _connection?.Dispose();
                 _connection = null;
+            }
+        }
+
+        /// <summary>
+        /// Acquires the process-wide database lock so a read on this instance's
+        /// connection cannot collide with a write on another repository instance's
+        /// connection to the same file (the source of intermittent SQLITE_BUSY).
+        /// The read-only preview repository is skipped: it is always accessed
+        /// inside a <see cref="BeginReadOnlySession"/> that already holds the lock.
+        /// </summary>
+        private void EnterReadScope()
+        {
+            if (!_readOnly)
+            {
+                DatabaseWriteLock.Wait();
+            }
+        }
+
+        private void ExitReadScope()
+        {
+            if (!_readOnly)
+            {
+                DatabaseWriteLock.Release();
             }
         }
 
@@ -116,6 +141,7 @@ namespace TheIntroDB.Data
 
         public HashSet<MediaSegmentType> GetStoredTypes(long itemInternalId)
         {
+            EnterReadScope();
             _lock.EnterReadLock();
             try
             {
@@ -144,11 +170,13 @@ namespace TheIntroDB.Data
             finally
             {
                 _lock.ExitReadLock();
+                ExitReadScope();
             }
         }
 
         public IReadOnlyList<StoredMediaSegment> GetSegments(long itemInternalId)
         {
+            EnterReadScope();
             _lock.EnterReadLock();
             try
             {
@@ -184,6 +212,7 @@ namespace TheIntroDB.Data
             finally
             {
                 _lock.ExitReadLock();
+                ExitReadScope();
             }
         }
 
@@ -195,6 +224,7 @@ namespace TheIntroDB.Data
         /// </summary>
         public IReadOnlyList<long> GetSegmentedIds()
         {
+            EnterReadScope();
             _lock.EnterReadLock();
             try
             {
@@ -221,11 +251,13 @@ namespace TheIntroDB.Data
             finally
             {
                 _lock.ExitReadLock();
+                ExitReadScope();
             }
         }
 
         public IReadOnlyDictionary<long, DateTime> GetLastCheckedUtc()
         {
+            EnterReadScope();
             _lock.EnterReadLock();
             try
             {
@@ -254,6 +286,7 @@ namespace TheIntroDB.Data
             finally
             {
                 _lock.ExitReadLock();
+                ExitReadScope();
             }
         }
 
@@ -317,6 +350,7 @@ namespace TheIntroDB.Data
 
         public IReadOnlyList<OwnedChapterMarker> GetOwnedChapters(long itemInternalId)
         {
+            EnterReadScope();
             _lock.EnterReadLock();
             try
             {
@@ -349,6 +383,7 @@ namespace TheIntroDB.Data
             finally
             {
                 _lock.ExitReadLock();
+                ExitReadScope();
             }
         }
 
@@ -499,6 +534,8 @@ namespace TheIntroDB.Data
 
                 var writeFlags = ConnectionFlags.Create | ConnectionFlags.ReadWrite | ConnectionFlags.PrivateCache | ConnectionFlags.NoMutex;
                 _connection = SQLite3.Open(_dbFilePath, writeFlags, null, false);
+                _connection.Execute("PRAGMA busy_timeout = 5000");
+                _logger.Debug("TheIntroDB segment DB opened (writable) at {0}", _dbFilePath);
                 return _connection;
             }
         }
