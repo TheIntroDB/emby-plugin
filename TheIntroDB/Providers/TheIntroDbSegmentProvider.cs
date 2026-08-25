@@ -161,6 +161,12 @@ namespace TheIntroDB.Providers
                 return SegmentFetchResult.RateLimited();
             }
 
+            if (mediaResult.IsServerError)
+            {
+                _logger.Warn("TheIntroDB API server error for {0}", item.Name);
+                return SegmentFetchResult.ServerError();
+            }
+
             if (mediaResult.IsError)
             {
                 _logger.Error("TheIntroDB API error for {0}", item.Name);

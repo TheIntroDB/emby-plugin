@@ -194,13 +194,22 @@ namespace TheIntroDB.Services
 
                     if (!result.IsLookupCompleted)
                     {
-                        consecutiveApiFailures++;
-                        if (consecutiveApiFailures >= MaxConsecutiveApiFailures)
+                        if (!result.IsServerError)
                         {
-                            _logger.Error(
-                                "TheIntroDB scan aborting: {0} consecutive failures (API may be down). Skipping remaining {1} items.",
-                                consecutiveApiFailures, itemsToScan.Length - i);
-                            break;
+                            consecutiveApiFailures++;
+                            if (consecutiveApiFailures >= MaxConsecutiveApiFailures)
+                            {
+                                _logger.Error(
+                                    "TheIntroDB scan aborting: {0} consecutive failures (API may be down). Skipping remaining {1} items.",
+                                    consecutiveApiFailures, itemsToScan.Length - i);
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            _logger.Warn(
+                                "TheIntroDB API server error for {0} (not counting toward consecutive failure limit)",
+                                item.Name);
                         }
 
                         continue;
