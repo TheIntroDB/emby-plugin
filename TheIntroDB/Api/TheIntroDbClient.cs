@@ -206,6 +206,24 @@ namespace TheIntroDB.Api
                                     return MediaFetchResult.ServerError();
                                 }
 
+                                if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                                {
+                                    TrackUsage(trackUsage,
+                                        "theintrodb_api_media_fetch",
+                                        new Dictionary<string, object>
+                                        {
+                                            ["host"] = "emby",
+                                            ["result"] = "http_4xx",
+                                            ["status"] = (int)response.StatusCode,
+                                            ["media_type"] = isMovie ? "movie" : "episode",
+                                            ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                            ["has_tvdb"] = hasTvdb ? 1 : 0,
+                                            ["has_imdb"] = hasImdb ? 1 : 0,
+                                            ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                                        });
+                                    return MediaFetchResult.ClientError();
+                                }
+
                                 TrackUsage(trackUsage,
                                     "theintrodb_api_media_fetch",
                                     new Dictionary<string, object>

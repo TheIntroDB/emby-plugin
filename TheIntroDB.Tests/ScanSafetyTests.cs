@@ -110,6 +110,49 @@ namespace TheIntroDB.Tests
             yield return new object[] { SegmentFetchResult.NotAttempted() };
             yield return new object[] { SegmentFetchResult.Error() };
             yield return new object[] { SegmentFetchResult.RateLimited() };
+            yield return new object[] { SegmentFetchResult.ClientError() };
+        }
+
+        [Fact]
+        public void ClientErrorIsClassifiedAsIncompleteClientRejection()
+        {
+            var result = SegmentFetchResult.ClientError();
+            Assert.True(result.IsError);
+            Assert.True(result.IsClientError);
+            Assert.False(result.IsServerError);
+            Assert.False(result.IsLookupCompleted);
+            Assert.True(result.WasApiAttempted);
+        }
+
+        [Fact]
+        public void ClientErrorResultFromApiIsNotServerErrorOrNotFound()
+        {
+            var result = TheIntroDB.Api.MediaFetchResult.ClientError();
+            Assert.True(result.IsError);
+            Assert.True(result.IsClientError);
+            Assert.False(result.IsServerError);
+            Assert.False(result.IsNotFound);
+        }
+
+        [Fact]
+        public void FailureLimitCountsOnlyTransportFailures()
+        {
+            Assert.True(CountsTowardLimit(SegmentFetchResult.Error()));
+            Assert.False(CountsTowardLimit(SegmentFetchResult.ClientError()));
+            Assert.False(CountsTowardLimit(SegmentFetchResult.ServerError()));
+            Assert.False(CountsTowardLimit(SegmentFetchResult.NotFound()));
+            Assert.False(CountsTowardLimit(SegmentFetchResult.Success(System.Array.Empty<MediaSegmentData>())));
+            Assert.False(CountsTowardLimit(SegmentFetchResult.RateLimited()));
+            Assert.False(CountsTowardLimit(SegmentFetchResult.NotAttempted()));
+        }
+
+        private static bool CountsTowardLimit(SegmentFetchResult result)
+        {
+            var method = typeof(TheIntroDbLibraryScanner).GetMethod(
+                "ShouldCountTowardFailureLimit",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+            return Assert.IsType<bool>(method.Invoke(null, new object[] { result }));
         }
 
         [Fact]

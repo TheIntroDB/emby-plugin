@@ -194,7 +194,7 @@ namespace TheIntroDB.Services
 
                     if (!result.IsLookupCompleted)
                     {
-                        if (!result.IsServerError)
+                        if (ShouldCountTowardFailureLimit(result))
                         {
                             consecutiveApiFailures++;
                             if (consecutiveApiFailures >= MaxConsecutiveApiFailures)
@@ -205,10 +205,16 @@ namespace TheIntroDB.Services
                                 break;
                             }
                         }
-                        else
+                        else if (result.IsServerError)
                         {
                             _logger.Warn(
                                 "TheIntroDB API server error for {0} (not counting toward consecutive failure limit)",
+                                item.Name);
+                        }
+                        else
+                        {
+                            _logger.Warn(
+                                "TheIntroDB API rejected request for {0} (client error, not counting toward consecutive failure limit)",
                                 item.Name);
                         }
 
@@ -300,6 +306,22 @@ namespace TheIntroDB.Services
         private static bool CanRetryAfterRateLimit(int retriesCompleted)
         {
             return retriesCompleted < MaxRateLimitRetriesPerItem;
+        }
+
+        /// <summary>
+        /// Returns true when a lookup result should advance the consecutive-failure
+        /// counter that aborts the scan. Only genuine "API may be down" signals count
+        /// (transport failures after retries — <see cref="SegmentFetchResult.Error"/>).
+        /// Server (5xx) and client (4xx) responses prove the API is reachable and
+        /// answering, so they never abort the scan.
+        /// </summary>
+        private static bool ShouldCountTowardFailureLimit(SegmentFetchResult result)
+        {
+            return result.WasApiAttempted
+                && !result.IsLookupCompleted
+                && !result.IsServerError
+                && !result.IsClientError
+                && !result.IsRateLimited;
         }
 
         private static BaseItem[] OrderItemsForScan(

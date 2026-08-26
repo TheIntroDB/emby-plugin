@@ -167,6 +167,12 @@ namespace TheIntroDB.Providers
                 return SegmentFetchResult.ServerError();
             }
 
+            if (mediaResult.IsClientError)
+            {
+                _logger.Warn("TheIntroDB API rejected the request for {0} (client error). Skipping item.", item.Name);
+                return SegmentFetchResult.ClientError();
+            }
+
             if (mediaResult.IsError)
             {
                 _logger.Error("TheIntroDB API error for {0}", item.Name);
