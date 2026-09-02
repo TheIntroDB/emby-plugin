@@ -149,8 +149,12 @@ namespace TheIntroDB.Services
                     {
                         if (!lookupBudget.TryBeginLookup())
                         {
-                            _logger.Info("TheIntroDB scan stopped at the configured lookup limit of {0}",
-                                config.MaxLookupsPerRun);
+                            _logger.Warn(
+                                "TheIntroDB scan stopped at the configured lookup limit of {0} (MaxLookupsPerRun). " +
+                                "Only {1} of {2} items were processed this run. " +
+                                "Raise \"Maximum API lookups per run\" in plugin settings to scan more items per run; " +
+                                "re-running the scan (or the scheduled task) continues where it left off.",
+                                config.MaxLookupsPerRun, processed, total);
                             stopScan = true;
                             break;
                         }
@@ -270,9 +274,19 @@ namespace TheIntroDB.Services
                 }
             }
 
-            _logger.Info("Library scan completed. Found {0} total segments ({1} cached + {2} newly scanned) in {3} items with {4} lookups. Preview={5}",
-                totalSegments, cachedSegmentCount, totalSegments - cachedSegmentCount,
-                cachedSegmentCount + processed, lookupBudget.Used, preview);
+            if (stopScan)
+            {
+                _logger.Warn("Library scan stopped early after reaching the lookup limit. Found {0} total segments ({1} cached + {2} newly scanned) in {3} items with {4} lookups. Preview={5}",
+                    totalSegments, cachedSegmentCount, totalSegments - cachedSegmentCount,
+                    cachedSegmentCount + processed, lookupBudget.Used, preview);
+            }
+            else
+            {
+                _logger.Info("Library scan completed. Found {0} total segments ({1} cached + {2} newly scanned) in {3} items with {4} lookups. Preview={5}",
+                    totalSegments, cachedSegmentCount, totalSegments - cachedSegmentCount,
+                    cachedSegmentCount + processed, lookupBudget.Used, preview);
+            }
+
             return totalSegments;
         }
 

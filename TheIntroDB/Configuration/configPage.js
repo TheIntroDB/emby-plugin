@@ -958,7 +958,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                                 page.querySelector('#ProtectExistingIntroMarkers').checked = config.ProtectExistingIntroMarkers !== false;
                                 page.querySelector('#ProtectExistingCreditsMarkers').checked = config.ProtectExistingCreditsMarkers !== false;
                                 page.querySelector('#ReplaceExistingMarkers').checked = config.ReplaceExistingMarkers === true;
-                                page.querySelector('#MaxLookupsPerRun').value = config.MaxLookupsPerRun != null ? config.MaxLookupsPerRun : 200;
+                                page.querySelector('#MaxLookupsPerRun').value = config.MaxLookupsPerRun != null ? config.MaxLookupsPerRun : 10000;
                                 page.querySelector('#EnableOnDemandFetch').checked = config.EnableOnDemandFetch !== false;
                                 page.querySelector('#EnableAnonymousUsageReporting').checked = config.EnableAnonymousUsageReporting !== false;
                                 page.querySelector('#EnableFileLogging').checked = config.EnableFileLogging === true;
