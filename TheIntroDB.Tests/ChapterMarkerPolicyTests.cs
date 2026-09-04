@@ -61,7 +61,7 @@ namespace TheIntroDB.Tests
 
             Assert.True(config.ProtectExistingIntroMarkers);
             Assert.True(config.ProtectExistingCreditsMarkers);
-            Assert.Equal(10000, config.MaxLookupsPerRun);
+            Assert.Equal(400, config.MaxLookupsPerRun);
             Assert.False(config.EnableOnDemandFetch);
             Assert.False(config.EnableAnonymousUsageReporting);
             Assert.False(config.EnablePreview);

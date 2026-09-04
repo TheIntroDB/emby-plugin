@@ -27,7 +27,7 @@ namespace TheIntroDB.Configuration
             ProtectExistingIntroMarkers = true;
             ProtectExistingCreditsMarkers = true;
             ReplaceExistingMarkers = false;
-            MaxLookupsPerRun = 10000;
+            MaxLookupsPerRun = 400;
             LegacyMarkerAdoptionVersion = 0;
         }
 
@@ -93,7 +93,7 @@ namespace TheIntroDB.Configuration
         public bool ReplaceExistingMarkers { get; set; }
 
         /// <summary>
-        /// Gets or sets the maximum API lookups per scheduled run. Default 10,000.
+        /// Gets or sets the maximum API lookups per scheduled run. Default 400.
         /// Zero means no lookups (scan effectively disabled).
         /// </summary>
         public int MaxLookupsPerRun { get; set; }
