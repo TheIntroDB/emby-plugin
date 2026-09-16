@@ -129,6 +129,14 @@ namespace TheIntroDB.Services
                     break;
                 }
 
+                if (IsParkedBeyondRetryWindow())
+                {
+                    _logger.Warn(
+                        "TheIntroDB API daily usage limit is exhausted until {0} UTC. Stopping scan; re-run it later (e.g. tomorrow) to continue where it left off.",
+                        Plugin.RateLimitExpiryUtc);
+                    break;
+                }
+
                 try
                 {
                     if (!preview)
@@ -170,6 +178,15 @@ namespace TheIntroDB.Services
 
                         if (!result.IsRateLimited)
                         {
+                            break;
+                        }
+
+                        if (IsParkedBeyondRetryWindow())
+                        {
+                            _logger.Warn(
+                                "TheIntroDB API daily usage limit is exhausted until {0} UTC. Stopping scan; re-run it later (e.g. tomorrow) to continue where it left off.",
+                                Plugin.RateLimitExpiryUtc);
+                            stopScan = true;
                             break;
                         }
 
@@ -320,6 +337,17 @@ namespace TheIntroDB.Services
         private static bool CanRetryAfterRateLimit(int retriesCompleted)
         {
             return retriesCompleted < MaxRateLimitRetriesPerItem;
+        }
+
+        /// <summary>
+        /// True when the rate-limit park extends beyond the per-item retry window.
+        /// That only happens when the daily usage bucket is exhausted (its reset is
+        /// hours away, until UTC midnight) — retrying the same item or burning
+        /// per-item waits is pointless, so the scan should stop cleanly instead.
+        /// </summary>
+        private static bool IsParkedBeyondRetryWindow()
+        {
+            return Plugin.RateLimitExpiryUtc - DateTime.UtcNow > MaxRateLimitRetryDelay;
         }
 
         /// <summary>

@@ -16,12 +16,16 @@ namespace TheIntroDB.Api
     {
         // Keep a safety margin below the provider ceiling of 30 requests per 10 seconds.
         private const int MaxRequestsPerWindow = 25;
+        private const int UsageResetClampSeconds = 24 * 60 * 60;
+        private const int MaxConsecutiveRateLimitMultiplier = 8;
         private static readonly TimeSpan RateLimitWindow = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan MinDelayBetweenRequests = TimeSpan.FromMilliseconds(RateLimitWindow.TotalMilliseconds / MaxRequestsPerWindow);
         private static readonly TimeSpan MaxRateLimitDelay = TimeSpan.FromMinutes(5);
 
         private static readonly SemaphoreSlim RateLimitLock = new SemaphoreSlim(1, 1);
         private static DateTime _lastRequestUtc = DateTime.MinValue;
+        private static DateTime _nextAllowedSendUtc = DateTime.MinValue;
+        private static int _consecutiveRateLimits;
 
         private readonly HttpClient _httpClient;
         private readonly Plugin _plugin;
@@ -49,9 +53,20 @@ namespace TheIntroDB.Api
             {
                 var waitUntil = Plugin.RateLimitExpiryUtc;
                 var delay = waitUntil - DateTime.UtcNow;
+                if (delay > MaxRateLimitDelay)
+                {
+                    // The daily usage bucket is exhausted and its reset can be
+                    // hours away (until UTC midnight). Sleeping the task is
+                    // pointless — report the park so the scan stops cleanly and
+                    // the user re-runs it later.
+                    _logger.Warn(
+                        "TheIntroDB API daily usage limit is exhausted until {0} UTC. Skipping request.",
+                        waitUntil);
+                    return MediaFetchResult.RateLimited();
+                }
+
                 if (delay > TimeSpan.Zero)
                 {
-                    delay = ClampRateLimit(delay);
                     _logger.Warn(
                         "TheIntroDB API rate limit is currently active. Waiting {0}s until {1} UTC to retry...",
                         (int)delay.TotalSeconds, waitUntil);
@@ -139,11 +154,21 @@ namespace TheIntroDB.Api
 
                             if ((int)response.StatusCode == 429)
                             {
-                                var retryAfterSeconds = GetRetryAfterSeconds(response.Headers);
-                                Plugin.RateLimitExpiryUtc = DateTime.UtcNow.AddSeconds(retryAfterSeconds);
+                                var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                                var retryAfterSeconds = GetRetryAfterSeconds(response.Headers, body);
+                                var consecutive = Interlocked.Increment(ref _consecutiveRateLimits);
+                                var isUsageLimit = IsUsageLimitResponse(body) || retryAfterSeconds > (int)MaxRateLimitDelay.TotalSeconds;
+                                var waitSeconds = isUsageLimit
+                                    ? retryAfterSeconds
+                                    : ApplyConsecutiveBackOff(retryAfterSeconds, consecutive);
+
+                                Plugin.RateLimitExpiryUtc = DateTime.UtcNow.AddSeconds(waitSeconds);
                                 _logger.Warn(
-                                    "TheIntroDB API rate limit exceeded. Retry-after: {0}s. The scan may retry within its configured budget.",
-                                    retryAfterSeconds);
+                                    "TheIntroDB API {0} exceeded. Will not send requests until {1} UTC. Retry-after: {2}s. Consecutive 429 responses: {3}",
+                                    isUsageLimit ? "daily usage limit" : "rate limit",
+                                    Plugin.RateLimitExpiryUtc,
+                                    retryAfterSeconds,
+                                    consecutive);
 
                                 TrackUsage(trackUsage,
                                     "theintrodb_api_media_fetch",
@@ -160,6 +185,9 @@ namespace TheIntroDB.Api
 
                                 return MediaFetchResult.RateLimited();
                             }
+
+                            Interlocked.Exchange(ref _consecutiveRateLimits, 0);
+                            UpdateRateWindowFromHeaders(response.Headers);
 
                             if (!response.IsSuccessStatusCode)
                             {
@@ -327,16 +355,29 @@ namespace TheIntroDB.Api
             }
         }
 
-        private static int GetRetryAfterSeconds(HttpResponseHeaders headers)
+        /// <summary>
+        /// Computes how long to wait after a 429. Usage-limit responses carry the
+        /// daily bucket's reset (seconds until UTC midnight) and must be trusted
+        /// for up to 24 hours — clamping them to five minutes turns an exhausted
+        /// daily budget into a probe-every-five-minutes loop. Rate-limit responses
+        /// carry a 10-second window and stay clamped to the five-minute ceiling.
+        /// </summary>
+        private static int GetRetryAfterSeconds(HttpResponseHeaders headers, string body)
         {
             IEnumerable<string> usageResetValues;
+            var isUsageLimit = IsUsageLimitResponse(body);
             if (headers.TryGetValues("X-UsageLimit-Reset", out usageResetValues))
             {
                 var usageResetValue = usageResetValues.FirstOrDefault();
                 int usageResetSeconds;
-                if (int.TryParse(usageResetValue, out usageResetSeconds))
+                if (int.TryParse(usageResetValue, out usageResetSeconds) && usageResetSeconds > 0)
                 {
-                    return ClampRetryAfter(usageResetSeconds);
+                    if (usageResetSeconds > (int)MaxRateLimitDelay.TotalSeconds)
+                    {
+                        isUsageLimit = true;
+                    }
+
+                    return ClampRetryAfter(usageResetSeconds, isUsageLimit ? UsageResetClampSeconds : (int)MaxRateLimitDelay.TotalSeconds);
                 }
             }
 
@@ -345,46 +386,139 @@ namespace TheIntroDB.Api
             {
                 var rateResetValue = rateResetValues.FirstOrDefault();
                 int rateResetSeconds;
-                if (int.TryParse(rateResetValue, out rateResetSeconds))
+                if (int.TryParse(rateResetValue, out rateResetSeconds) && rateResetSeconds > 0)
                 {
-                    return ClampRetryAfter(rateResetSeconds);
+                    return ClampRetryAfter(rateResetSeconds, isUsageLimit ? UsageResetClampSeconds : (int)MaxRateLimitDelay.TotalSeconds);
                 }
             }
 
             if (headers.RetryAfter != null && headers.RetryAfter.Delta.HasValue)
             {
-                return ClampRetryAfter((int)headers.RetryAfter.Delta.Value.TotalSeconds);
+                return ClampRetryAfter((int)headers.RetryAfter.Delta.Value.TotalSeconds, isUsageLimit ? UsageResetClampSeconds : (int)MaxRateLimitDelay.TotalSeconds);
             }
 
             if (headers.RetryAfter != null && headers.RetryAfter.Date.HasValue)
             {
                 return ClampRetryAfter((int)Math.Ceiling(
-                    (headers.RetryAfter.Date.Value.UtcDateTime - DateTime.UtcNow).TotalSeconds));
+                    (headers.RetryAfter.Date.Value.UtcDateTime - DateTime.UtcNow).TotalSeconds), isUsageLimit ? UsageResetClampSeconds : (int)MaxRateLimitDelay.TotalSeconds);
             }
 
             return (int)MaxRateLimitDelay.TotalSeconds;
         }
 
-        private static int ClampRetryAfter(int seconds)
+        private static bool IsUsageLimitResponse(string body)
         {
-            return Math.Max(1, Math.Min(seconds, (int)MaxRateLimitDelay.TotalSeconds));
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return false;
+            }
+
+            try
+            {
+                using (var document = JsonDocument.Parse(body))
+                {
+                    if (document.RootElement.TryGetProperty("code", out var codeElement)
+                        && codeElement.ValueKind == JsonValueKind.String
+                        && codeElement.GetString() is string code)
+                    {
+                        return code == "usage_limit_exceeded" || code == "specific_media_usage_limit_exceeded";
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Not JSON (e.g. a proxy's plain-text 429): fall back to header parsing.
+            }
+
+            return false;
         }
 
-        private static TimeSpan ClampRateLimit(TimeSpan delay)
+        /// <summary>
+        /// Grows the back-off wait across consecutive 429 responses so a
+        /// still-exhausted bucket is probed less and less often.
+        /// </summary>
+        private static int ApplyConsecutiveBackOff(int baseSeconds, int consecutive)
         {
-            return delay > MaxRateLimitDelay ? MaxRateLimitDelay : delay;
+            if (consecutive <= 1)
+            {
+                return baseSeconds;
+            }
+
+            var multiplier = Math.Min(consecutive, MaxConsecutiveRateLimitMultiplier);
+            return Math.Min(baseSeconds * multiplier, (int)MaxRateLimitDelay.TotalSeconds);
         }
 
+        private static int ClampRetryAfter(int seconds, int maxClamp)
+        {
+            return Math.Max(1, Math.Min(seconds, maxClamp));
+        }
+
+        /// <summary>
+        /// When the API advertises that almost no rate-limit budget remains, hold the
+        /// next request until the window resets. Insurance against external consumers
+        /// of the same bucket (other integrations sharing the key or public IP).
+        /// </summary>
+        private static void UpdateRateWindowFromHeaders(HttpResponseHeaders headers)
+        {
+            IEnumerable<string> remainingValues;
+            if (!headers.TryGetValues("X-RateLimit-Remaining", out remainingValues))
+            {
+                return;
+            }
+
+            int remaining;
+            if (!int.TryParse(remainingValues.FirstOrDefault(), out remaining) || remaining > 1)
+            {
+                return;
+            }
+
+            IEnumerable<string> resetValues;
+            if (!headers.TryGetValues("X-RateLimit-Reset", out resetValues))
+            {
+                return;
+            }
+
+            int resetSeconds;
+            if (!int.TryParse(resetValues.FirstOrDefault(), out resetSeconds) || resetSeconds <= 0)
+            {
+                return;
+            }
+
+            var resetUtc = DateTime.UtcNow.AddSeconds(ClampRetryAfter(resetSeconds, (int)MaxRateLimitDelay.TotalSeconds));
+            if (resetUtc > _nextAllowedSendUtc)
+            {
+                _nextAllowedSendUtc = resetUtc;
+            }
+        }
+
+        /// <summary>
+        /// Waits if necessary to respect the API rate limit (30 requests per 10 seconds),
+        /// plus any hold imposed by a nearly-exhausted rate window.
+        /// </summary>
         private static async Task WaitForRateLimitAsync(CancellationToken cancellationToken)
         {
             await RateLimitLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 var now = DateTime.UtcNow;
-                var elapsed = now - _lastRequestUtc;
-                if (elapsed < MinDelayBetweenRequests)
+                var waitUntil = now;
+                if (_lastRequestUtc != DateTime.MinValue)
                 {
-                    var waitTime = MinDelayBetweenRequests - elapsed;
+                    var pacedSend = _lastRequestUtc + MinDelayBetweenRequests;
+                    if (pacedSend > waitUntil)
+                    {
+                        waitUntil = pacedSend;
+                    }
+                }
+
+                if (_nextAllowedSendUtc > waitUntil)
+                {
+                    waitUntil = _nextAllowedSendUtc;
+                }
+
+                var waitTime = waitUntil - now;
+                if (waitTime > TimeSpan.Zero)
+                {
                     await Task.Delay(waitTime, cancellationToken).ConfigureAwait(false);
                 }
 
