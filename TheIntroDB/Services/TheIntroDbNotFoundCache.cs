@@ -26,6 +26,15 @@ namespace TheIntroDB.Services
 
         private static readonly object FileLock = new object();
 
+        private static readonly Lazy<TheIntroDbNotFoundCache> SharedInstance = new Lazy<TheIntroDbNotFoundCache>(() =>
+        {
+            var dataPath = Plugin.DataPath;
+            var filePath = string.IsNullOrEmpty(dataPath)
+                ? null
+                : Path.Combine(dataPath, "theintrodb", "notfound-cache.json");
+            return new TheIntroDbNotFoundCache(filePath, Plugin.Instance?.FileLogger);
+        });
+
         private readonly ConcurrentDictionary<string, DateTime> _entries = new ConcurrentDictionary<string, DateTime>(StringComparer.Ordinal);
         private readonly string _filePath;
         private readonly ILogger _logger;
@@ -41,6 +50,39 @@ namespace TheIntroDB.Services
         {
             _filePath = filePath;
             _logger = logger;
+        }
+
+        /// <summary>
+        /// Gets the shared cache instance used by the segment provider and the config page.
+        /// </summary>
+        public static TheIntroDbNotFoundCache Instance => SharedInstance.Value;
+
+        /// <summary>
+        /// Removes all cached not-found answers, in memory and on disk.
+        /// </summary>
+        /// <returns>The number of entries that were cached.</returns>
+        public int Clear()
+        {
+            lock (FileLock)
+            {
+                var cleared = _entries.Count;
+                _entries.Clear();
+                Interlocked.Exchange(ref _unsavedChanges, 0);
+
+                if (!string.IsNullOrEmpty(_filePath) && File.Exists(_filePath))
+                {
+                    try
+                    {
+                        File.Delete(_filePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.ErrorException(string.Format("Failed to delete TheIntroDB not-found cache file {0}", _filePath), ex);
+                    }
+                }
+
+                return cleared;
+            }
         }
 
         /// <summary>

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -23,19 +22,6 @@ namespace TheIntroDB.Providers
     public class TheIntroDbSegmentProvider
     {
         private static readonly HttpClient _httpClient = new HttpClient();
-
-        /// <summary>
-        /// Remembers items the API has no data for so they are not re-requested on
-        /// every scan. Shared across provider instances; persists to the plugin data folder.
-        /// </summary>
-        private static readonly Lazy<TheIntroDbNotFoundCache> NotFoundCache = new Lazy<TheIntroDbNotFoundCache>(() =>
-        {
-            var dataPath = Plugin.DataPath;
-            var filePath = string.IsNullOrEmpty(dataPath)
-                ? null
-                : Path.Combine(dataPath, "theintrodb", "notfound-cache.json");
-            return new TheIntroDbNotFoundCache(filePath, Plugin.Instance?.FileLogger);
-        });
 
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
@@ -101,7 +87,7 @@ namespace TheIntroDB.Providers
             }
 
             var itemCacheKey = "item:" + itemId.ToString("N");
-            if (NotFoundCache.Value.TryGetHit(itemCacheKey))
+            if (TheIntroDbNotFoundCache.Instance.TryGetHit(itemCacheKey))
             {
                 _logger.Debug("Skipping {0}: known not found in TheIntroDB (cached)", item.Name);
                 return SegmentFetchResult.NotAttempted();
@@ -149,14 +135,14 @@ namespace TheIntroDB.Providers
                   "(null)" :
                   string.Join(",", item.ProviderIds.Select(kvp => kvp.Key + "=" + kvp.Value));
                 _logger.Warn("Early exit: no TmdbId, TvdbId, or ImdbId for {0}. ProviderIds: {1}", item.Name, providers);
-                NotFoundCache.Value.RememberNotFound(itemCacheKey);
+                TheIntroDbNotFoundCache.Instance.RememberNotFound(itemCacheKey);
                 return SegmentFetchResult.NotAttempted();
             }
 
             if (!isMovie && (!season.HasValue || !episode.HasValue))
             {
                 _logger.Warn("Early exit: TV episode missing season/episode for {0}", item.Name);
-                NotFoundCache.Value.RememberNotFound(itemCacheKey);
+                TheIntroDbNotFoundCache.Instance.RememberNotFound(itemCacheKey);
                 return SegmentFetchResult.NotAttempted();
             }
 
@@ -167,7 +153,7 @@ namespace TheIntroDB.Providers
               tmdbId, tvdbId, imdbId, isMovie, season, episode);
 
             var lookupKey = BuildNotFoundKey(isMovie, tmdbId, tvdbId, imdbId, season, episode);
-            if (NotFoundCache.Value.TryGetHit(lookupKey))
+            if (TheIntroDbNotFoundCache.Instance.TryGetHit(lookupKey))
             {
                 _logger.Debug("Skipping {0}: known not found in TheIntroDB (cached 404)", item.Name);
                 return SegmentFetchResult.NotAttempted();
@@ -184,7 +170,7 @@ namespace TheIntroDB.Providers
             if (mediaResult.IsNotFound)
             {
                 _logger.Info("TheIntroDB API returned no data for {0}", item.Name);
-                NotFoundCache.Value.RememberNotFound(lookupKey);
+                TheIntroDbNotFoundCache.Instance.RememberNotFound(lookupKey);
                 return SegmentFetchResult.NotFound();
             }
 

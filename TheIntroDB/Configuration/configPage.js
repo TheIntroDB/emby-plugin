@@ -920,6 +920,18 @@ define(["emby-input", "emby-button", "emby-checkbox"], () => (view) => {
         openShowPicker();
     });
 
+    page.querySelector("#ClearNotFoundCache").addEventListener("click", () => {
+        const statusElement = page.querySelector("#NotFoundCacheStatus");
+        statusElement.textContent = "Clearing...";
+        postJson(ApiClient.getUrl("TheIntroDB/NotFoundCache/Clear"), {})
+            .then((response) => {
+                statusElement.textContent = `Cleared ${response.ClearedEntries} cached not-found item(s). Run the Media segment scan to re-check your library.`;
+            })
+            .catch(() => {
+                statusElement.textContent = "Failed to clear the not-found cache.";
+            });
+    });
+
     page.querySelector("#CloseShowPicker").addEventListener("click", () => {
         closeShowPicker();
     });
