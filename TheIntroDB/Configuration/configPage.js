@@ -1,4 +1,5 @@
-define(["emby-input", "emby-button", "emby-checkbox"], () => (view) => {
+define(["emby-input", "emby-button", "emby-checkbox"], function () {
+    return function (view) {
     var pluginUniqueId = "424b8e01-03d2-40a1-ba58-a2b9306f115d";
     var selectedShowIds = [];
     var selectedShowNames = [];
@@ -1085,4 +1086,5 @@ define(["emby-input", "emby-button", "emby-checkbox"], () => (view) => {
 
     updateSelectedSummary();
     showLibraryRoot();
+    };
 });
