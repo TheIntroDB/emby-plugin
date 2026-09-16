@@ -36,6 +36,11 @@ namespace TheIntroDB
 
         internal static DateTime RateLimitExpiryUtc { get; set; }
 
+        /// <summary>
+        /// Gets the Emby data path for plugin storage, or null before the instance exists.
+        /// </summary>
+        internal static string DataPath => Instance?.ApplicationPaths?.DataPath;
+
         internal void InitConfig()
         {
             PluginConfiguration config;

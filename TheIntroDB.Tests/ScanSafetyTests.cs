@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Threading;
 using MediaBrowser.Common.Configuration;
@@ -62,7 +63,7 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
-        public void RetryAfterIsClamped()
+        public void UsageLimitResetIsTrustedUpToDailyCeiling()
         {
             var method = typeof(TheIntroDB.Api.TheIntroDbClient).GetMethod(
                 "GetRetryAfterSeconds",
@@ -71,9 +72,79 @@ namespace TheIntroDB.Tests
 
             using (var response = new HttpResponseMessage())
             {
+                // A usage-limit 429 carries seconds until UTC midnight. Clamping
+                // this to five minutes would turn an exhausted daily budget into
+                // a probe loop (the 429-every-five-minutes behaviour).
+                response.Headers.Add("X-UsageLimit-Reset", "49000");
+                Assert.Equal(49000, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
+
+                // Sanity bound: never wait longer than a day for the daily bucket.
+                response.Headers.Clear();
                 response.Headers.Add("X-UsageLimit-Reset", "999999");
-                Assert.Equal(300, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers })));
+                Assert.Equal(86400, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
             }
+        }
+
+        [Fact]
+        public void RateLimitResetIsClampedToFiveMinutes()
+        {
+            var method = typeof(TheIntroDB.Api.TheIntroDbClient).GetMethod(
+                "GetRetryAfterSeconds",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            using (var response = new HttpResponseMessage())
+            {
+                // A broken/huge rate-limit reset must never disable lookups for days.
+                response.Headers.Add("X-RateLimit-Reset", "999999");
+                Assert.Equal(300, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
+            }
+        }
+
+        [Fact]
+        public void RetryAfterDeltaIsUsedForRateLimit429()
+        {
+            var method = typeof(TheIntroDB.Api.TheIntroDbClient).GetMethod(
+                "GetRetryAfterSeconds",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            using (var response = new HttpResponseMessage())
+            {
+                // Fiber's limiter answers rate-limit 429s with Retry-After only.
+                response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(10));
+                Assert.Equal(10, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
+            }
+        }
+
+        [Fact]
+        public void MissingResetHeadersFallBackToFiveMinutes()
+        {
+            var method = typeof(TheIntroDB.Api.TheIntroDbClient).GetMethod(
+                "GetRetryAfterSeconds",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            using (var response = new HttpResponseMessage())
+            {
+                Assert.Equal(300, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
+            }
+        }
+
+        [Fact]
+        public void ConsecutiveRateLimit429sBackOffMultiplicatively()
+        {
+            var method = typeof(TheIntroDB.Api.TheIntroDbClient).GetMethod(
+                "ApplyConsecutiveBackOff",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            Assert.Equal(10, Assert.IsType<int>(method.Invoke(null, new object[] { 10, 1 })));
+            Assert.Equal(20, Assert.IsType<int>(method.Invoke(null, new object[] { 10, 2 })));
+            Assert.Equal(30, Assert.IsType<int>(method.Invoke(null, new object[] { 10, 3 })));
+            Assert.Equal(80, Assert.IsType<int>(method.Invoke(null, new object[] { 10, 8 })));
+            Assert.Equal(80, Assert.IsType<int>(method.Invoke(null, new object[] { 10, 20 })));
+            Assert.Equal(300, Assert.IsType<int>(method.Invoke(null, new object[] { 300, 2 })));
         }
 
         [Fact]

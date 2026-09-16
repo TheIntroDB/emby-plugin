@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -11,6 +12,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
 using TheIntroDB.Api;
 using TheIntroDB.Models;
+using TheIntroDB.Services;
 
 namespace TheIntroDB.Providers
 {
@@ -21,6 +23,20 @@ namespace TheIntroDB.Providers
     public class TheIntroDbSegmentProvider
     {
         private static readonly HttpClient _httpClient = new HttpClient();
+
+        /// <summary>
+        /// Remembers items the API has no data for so they are not re-requested on
+        /// every scan. Shared across provider instances; persists to the plugin data folder.
+        /// </summary>
+        private static readonly Lazy<TheIntroDbNotFoundCache> NotFoundCache = new Lazy<TheIntroDbNotFoundCache>(() =>
+        {
+            var dataPath = Plugin.DataPath;
+            var filePath = string.IsNullOrEmpty(dataPath)
+                ? null
+                : Path.Combine(dataPath, "theintrodb", "notfound-cache.json");
+            return new TheIntroDbNotFoundCache(filePath, Plugin.Instance?.FileLogger);
+        });
+
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
 
@@ -84,6 +100,13 @@ namespace TheIntroDB.Providers
                 return SegmentFetchResult.NotAttempted();
             }
 
+            var itemCacheKey = "item:" + itemId.ToString("N");
+            if (NotFoundCache.Value.TryGetHit(itemCacheKey))
+            {
+                _logger.Debug("Skipping {0}: known not found in TheIntroDB (cached)", item.Name);
+                return SegmentFetchResult.NotAttempted();
+            }
+
             int? tmdbId = null;
             int? tvdbId = null;
             string imdbId = null;
@@ -126,12 +149,14 @@ namespace TheIntroDB.Providers
                   "(null)" :
                   string.Join(",", item.ProviderIds.Select(kvp => kvp.Key + "=" + kvp.Value));
                 _logger.Warn("Early exit: no TmdbId, TvdbId, or ImdbId for {0}. ProviderIds: {1}", item.Name, providers);
+                NotFoundCache.Value.RememberNotFound(itemCacheKey);
                 return SegmentFetchResult.NotAttempted();
             }
 
             if (!isMovie && (!season.HasValue || !episode.HasValue))
             {
                 _logger.Warn("Early exit: TV episode missing season/episode for {0}", item.Name);
+                NotFoundCache.Value.RememberNotFound(itemCacheKey);
                 return SegmentFetchResult.NotAttempted();
             }
 
@@ -140,6 +165,13 @@ namespace TheIntroDB.Providers
 
             _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, tvdbId={1}, imdbId={2}, isMovie={3}, season={4}, episode={5}",
               tmdbId, tvdbId, imdbId, isMovie, season, episode);
+
+            var lookupKey = BuildNotFoundKey(isMovie, tmdbId, tvdbId, imdbId, season, episode);
+            if (NotFoundCache.Value.TryGetHit(lookupKey))
+            {
+                _logger.Debug("Skipping {0}: known not found in TheIntroDB (cached 404)", item.Name);
+                return SegmentFetchResult.NotAttempted();
+            }
 
             var client = new TheIntroDbClient(_httpClient, Plugin.Instance, _logger);
             long? durationMs = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0 ?
@@ -152,6 +184,7 @@ namespace TheIntroDB.Providers
             if (mediaResult.IsNotFound)
             {
                 _logger.Info("TheIntroDB API returned no data for {0}", item.Name);
+                NotFoundCache.Value.RememberNotFound(lookupKey);
                 return SegmentFetchResult.NotFound();
             }
 
@@ -246,6 +279,28 @@ namespace TheIntroDB.Providers
             var supported = item is Episode || item is Movie || item is Video;
             _logger.Debug("Supports({0}, {1}): {2}", item?.Name ?? "null", item?.GetType().Name ?? "null", supported);
             return supported;
+        }
+
+        private static string BuildNotFoundKey(bool isMovie, int? tmdbId, int? tvdbId, string imdbId, int? season, int? episode)
+        {
+            var type = isMovie ? "movie" : "episode";
+            string idPart;
+            if (tmdbId.HasValue && tmdbId.Value > 0)
+            {
+                idPart = "tmdb:" + tmdbId.Value;
+            }
+            else if (tvdbId.HasValue && tvdbId.Value > 0)
+            {
+                idPart = "tvdb:" + tvdbId.Value;
+            }
+            else
+            {
+                idPart = "imdb:" + imdbId;
+            }
+
+            return isMovie
+                ? type + ":" + idPart
+                : type + ":" + idPart + ":" + season + ":" + episode;
         }
 
         private static int? GetTmdbId(BaseItem item)
