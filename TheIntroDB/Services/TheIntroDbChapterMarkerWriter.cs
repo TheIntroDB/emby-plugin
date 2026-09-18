@@ -103,11 +103,11 @@ namespace TheIntroDB.Services
                     case MediaSegmentType.Intro:
                         if (config.EnableIntro && !protectIntro)
                         {
-                            added += AddIntroMarkers(chapters, owned, item.InternalId, normalized);
+                            added += AddIntroMarkers(chapters, owned, item.InternalId, normalized, config.EnableChapterCreation);
                         }
                         break;
                     case MediaSegmentType.Recap:
-                        if (config.EnableRecap)
+                        if (config.EnableRecap && config.EnableChapterCreation)
                         {
                             added += AddChapterRange(chapters, owned, item.InternalId, "Recap",
                               "Recap End", normalized);
@@ -116,11 +116,11 @@ namespace TheIntroDB.Services
                     case MediaSegmentType.Credits:
                         if (config.EnableCredits && !protectCredits)
                         {
-                            added += AddCreditsMarkers(chapters, owned, item.InternalId, normalized);
+                            added += AddCreditsMarkers(chapters, owned, item.InternalId, normalized, config.EnableChapterCreation);
                         }
                         break;
                     case MediaSegmentType.Preview:
-                        if (config.EnablePreview)
+                        if (config.EnablePreview && config.EnableChapterCreation)
                         {
                             added += AddChapterRange(chapters, owned, item.InternalId, "Preview",
                               "Preview End", normalized);
@@ -165,40 +165,51 @@ namespace TheIntroDB.Services
         }
 
         private int AddIntroMarkers(List<ChapterInfo> chapters,
-          List<OwnedChapterMarker> owned, long itemInternalId, StoredMediaSegment s)
+          List<OwnedChapterMarker> owned, long itemInternalId, StoredMediaSegment s,
+          bool includeChapters)
         {
             var added = 0;
 
             // Always add start marker, even at 0:00
             added += AddIfMissing(chapters, owned, itemInternalId,
               MarkerType.IntroStart, s.StartTicks, "Intro");
-            added += AddIfMissing(chapters, owned, itemInternalId,
-              MarkerType.Chapter, s.StartTicks, "Intro" + ChapterMarkerPolicy.TheIntroDbTag);
+            if (includeChapters)
+            {
+                added += AddIfMissing(chapters, owned, itemInternalId,
+                  MarkerType.Chapter, s.StartTicks, "Intro" + ChapterMarkerPolicy.TheIntroDbTag);
+            }
 
             // Always add end marker, even if it equals start
             // (e.g. point-like intro at 0:00)
             added += AddIfMissing(chapters, owned, itemInternalId,
               MarkerType.IntroEnd, s.EndTicks, "Intro End");
-            added += AddIfMissing(chapters, owned, itemInternalId,
-              MarkerType.Chapter, s.EndTicks, "Intro End" + ChapterMarkerPolicy.TheIntroDbTag);
+            if (includeChapters)
+            {
+                added += AddIfMissing(chapters, owned, itemInternalId,
+                  MarkerType.Chapter, s.EndTicks, "Intro End" + ChapterMarkerPolicy.TheIntroDbTag);
+            }
 
             return added;
         }
 
         private int AddCreditsMarkers(List<ChapterInfo> chapters,
-          List<OwnedChapterMarker> owned, long itemInternalId, StoredMediaSegment s)
+          List<OwnedChapterMarker> owned, long itemInternalId, StoredMediaSegment s,
+          bool includeChapters)
         {
             var added = 0;
 
             // Start marker
             added += AddIfMissing(chapters, owned, itemInternalId,
               MarkerType.CreditsStart, s.StartTicks, "Credits");
-            added += AddIfMissing(chapters, owned, itemInternalId,
-              MarkerType.Chapter, s.StartTicks, "Credits" + ChapterMarkerPolicy.TheIntroDbTag);
+            if (includeChapters)
+            {
+                added += AddIfMissing(chapters, owned, itemInternalId,
+                  MarkerType.Chapter, s.StartTicks, "Credits" + ChapterMarkerPolicy.TheIntroDbTag);
 
-            // End marker at media duration, credits extend to the end
-            added += AddIfMissing(chapters, owned, itemInternalId,
-              MarkerType.Chapter, s.EndTicks, "Credits End" + ChapterMarkerPolicy.TheIntroDbTag);
+                // End marker at media duration, credits extend to the end
+                added += AddIfMissing(chapters, owned, itemInternalId,
+                  MarkerType.Chapter, s.EndTicks, "Credits End" + ChapterMarkerPolicy.TheIntroDbTag);
+            }
 
             return added;
         }

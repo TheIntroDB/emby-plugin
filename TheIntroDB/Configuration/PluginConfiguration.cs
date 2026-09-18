@@ -128,5 +128,15 @@ namespace TheIntroDB.Configuration
         /// 0 disables the automatic repair pass.
         /// </summary>
         public int MarkerRepairIntervalHours { get; set; } = 12;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to write chapter entries alongside
+        /// native markers. When enabled (default), every segment type gets both a native
+        /// marker (IntroStart/IntroEnd/CreditsStart) and a regular chapter entry with a
+        /// descriptive name. When disabled, only native markers are written — Recaps and
+        /// Previews have no native marker support in Emby and will be invisible without
+        /// chapters.
+        /// </summary>
+        public bool EnableChapterCreation { get; set; } = true;
     }
 }
