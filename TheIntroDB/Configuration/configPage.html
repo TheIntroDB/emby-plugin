@@ -1,8 +1,16 @@
-<div
-    data-role="page"
-    class="type-interior pluginConfigurationPage TheIntroDBConfigurationPage"
-    data-require="emby-input,emby-button,emby-checkbox"
-    data-controller="__plugin/TheIntroDBConfigurationPageJS">
+<div data-role="page" class="type-interior pluginConfigurationPage TheIntroDBConfigurationPage" data-require="emby-input,emby-button,emby-checkbox" data-controller="__plugin/TheIntroDBConfigurationPageJS">
+    <style>
+        .TheIntroDBConfigurationPage .verticalSection {
+            margin-top: 2em;
+        }
+        .TheIntroDBConfigurationPage .verticalSection h3.sectionTitle {
+            font-size: 1.15em;
+            font-weight: 600;
+            margin-bottom: 1em;
+            padding-bottom: 0.4em;
+            border-bottom: 1px solid rgba(117, 117, 117, 0.3);
+        }
+    </style>
     <div class="content-primary">
         <form id="TheIntroDbConfigForm">
             <div class="sectionTitleContainer flex align-items-center">
@@ -15,129 +23,145 @@
                 using each item's TMDB or IMDB ID. Segments are not loaded when you press play; run the TheIntroDB media segment scan scheduled task to populate them.
             </p>
 
-            <div class="inputContainer">
-                <label class="inputLabel inputLabelUnfocused" for="ApiKey">API key (optional)</label>
-                <input id="ApiKey" name="ApiKey" type="password" is="emby-input" autocomplete="off" />
-                <div class="fieldDescription">Optional Bearer token; when set, your pending and accepted submissions are weighted higher in results.</div>
-                <div id="ApiKeyValidationStatus" class="fieldDescription" style="display: none; margin-top: 0.75em; align-items: center; gap: 0.5em;"></div>
-            </div>
-            <div class="inputContainer">
-                <label class="inputLabel inputLabelUnfocused">Not-found cache</label>
-                <button id="ClearNotFoundCache" is="emby-button" type="button" class="raised emby-button">Clear not-found cache</button>
-                <div id="NotFoundCacheStatus" class="fieldDescription" style="margin-top: 0.75em;"></div>
-                <div class="fieldDescription">Items TheIntroDB has no data for are skipped for 14 days to save API requests. If you just submitted segments on theintrodb.org, clear the cache and run the Media segment scan to pull them into your library.</div>
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Connection</h3>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="ApiKey">API key (optional)</label>
+                    <input id="ApiKey" name="ApiKey" type="password" is="emby-input" autocomplete="off" />
+                    <div class="fieldDescription">Optional Bearer token; when set, your pending and accepted submissions are weighted higher in results.</div>
+                    <div id="ApiKeyValidationStatus" class="fieldDescription" style="display: none; margin-top: 0.75em; align-items: center; gap: 0.5em"></div>
+                </div>
             </div>
 
-            <div class="inputContainer">
-                <label class="inputLabel inputLabelUnfocused">Only scan selected shows or libraries (optional)</label>
-                <div id="SelectedShowSummary" class="fieldDescription" style="margin-bottom: 1em;">All media</div>
-                <button id="OpenShowPicker" is="emby-button" type="button" class="raised emby-button">Browse libraries and shows</button>
-                <button id="ClearSelectedShow" is="emby-button" type="button" class="raised emby-button" style="margin-left: 0.5em;">Clear selection</button>
-                <div class="fieldDescription">Whitelisting a library scans all movies and episodes inside it. Selecting individual movies or shows only scans those specific items. Any media outside the selected libraries or items is left unchanged.</div>
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Scan scope</h3>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused">Only scan selected shows or libraries (optional)</label>
+                    <div id="SelectedShowSummary" class="fieldDescription" style="margin-bottom: 1em">All media</div>
+                    <button id="OpenShowPicker" is="emby-button" type="button" class="raised emby-button">Browse libraries and shows</button>
+                    <button id="ClearSelectedShow" is="emby-button" type="button" class="raised emby-button" style="margin-left: 0.5em">Clear selection</button>
+                    <div class="fieldDescription">Whitelisting a library scans all movies and episodes inside it. Selecting individual movies or shows only scans those specific items. Any media outside the selected libraries or items is left unchanged.</div>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused">Not-found cache</label>
+                    <button id="ClearNotFoundCache" is="emby-button" type="button" class="raised emby-button">Clear not-found cache</button>
+                    <div id="NotFoundCacheStatus" class="fieldDescription" style="margin-top: 0.75em"></div>
+                    <div class="fieldDescription">Items TheIntroDB has no data for are skipped for 14 days to save API requests. If you just submitted segments on theintrodb.org, clear the cache and run the Media segment scan to pull them into your library.</div>
+                </div>
             </div>
 
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="EnableIntro" name="EnableIntro" type="checkbox" is="emby-checkbox" />
-                    <span>Provide intro segments</span>
-                </label>
-                <div class="fieldDescription">Include intro segments from TheIntroDB in Emby media processing.</div>
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Segments</h3>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="EnableIntro" name="EnableIntro" type="checkbox" is="emby-checkbox" />
+                        <span>Provide intro segments</span>
+                    </label>
+                    <div class="fieldDescription">Include intro segments from TheIntroDB in Emby media processing.</div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="EnableRecap" name="EnableRecap" type="checkbox" is="emby-checkbox" />
+                        <span>Provide recap segments</span>
+                    </label>
+                    <div class="fieldDescription">Include recap segments from TheIntroDB.</div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="EnableCredits" name="EnableCredits" type="checkbox" is="emby-checkbox" />
+                        <span>Provide credits (outro) segments</span>
+                    </label>
+                    <div class="fieldDescription">Include credits/outro segments from TheIntroDB.</div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="EnablePreview" name="EnablePreview" type="checkbox" is="emby-checkbox" />
+                        <span>Provide preview segments</span>
+                    </label>
+                    <div class="fieldDescription">Include preview segments from TheIntroDB.</div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="EnableChapterCreation" name="EnableChapterCreation" type="checkbox" is="emby-checkbox" />
+                        <span>Create chapter entries for segments</span>
+                    </label>
+                    <div class="fieldDescription">When enabled, readable chapter entries are created alongside native markers (IntroStart, CreditsStart). Recaps and Previews have no native marker support in Emby and will be invisible without chapters. Disable this to hide the identification string from chapter names.</div>
+                </div>
             </div>
 
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="EnableRecap" name="EnableRecap" type="checkbox" is="emby-checkbox" />
-                    <span>Provide recap segments</span>
-                </label>
-                <div class="fieldDescription">Include recap segments from TheIntroDB.</div>
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Marker protection</h3>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="ProtectExistingIntroMarkers" name="ProtectExistingIntroMarkers" type="checkbox" is="emby-checkbox" />
+                        <span>Protect existing intro markers</span>
+                    </label>
+                    <div class="fieldDescription">Recommended. Any existing complete or partial native intro marker prevents TheIntroDB from changing that intro pair.</div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="ProtectExistingCreditsMarkers" name="ProtectExistingCreditsMarkers" type="checkbox" is="emby-checkbox" />
+                        <span>Protect existing credits markers</span>
+                    </label>
+                    <div class="fieldDescription">Recommended. An existing native credits marker remains authoritative.</div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="ReplaceExistingMarkers" name="ReplaceExistingMarkers" type="checkbox" is="emby-checkbox" />
+                        <span>Replace existing TheIntroDB-owned markers</span>
+                    </label>
+                    <div class="fieldDescription">Off by default. Only chapters carrying a matching durable TheIntroDB ownership token are removed before updated markers are applied. Native, manual, legacy and third-party chapters remain unchanged.</div>
+                </div>
             </div>
 
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="EnableCredits" name="EnableCredits" type="checkbox" is="emby-checkbox" />
-                    <span>Provide credits (outro) segments</span>
-                </label>
-                <div class="fieldDescription">Include credits/outro segments from TheIntroDB.</div>
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Scanning behavior</h3>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="IgnoreMediaWithExistingSegments" name="IgnoreMediaWithExistingSegments" type="checkbox" is="emby-checkbox" />
+                        <span>Ignore media that already has segments</span>
+                    </label>
+                    <div class="fieldDescription">When enabled, items that already have segments are skipped to avoid refetching.</div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="EnableOnDemandFetch" name="EnableOnDemandFetch" type="checkbox" is="emby-checkbox" />
+                        <span>Automatically fetch segments on item addition</span>
+                    </label>
+                    <div class="fieldDescription">When enabled, segments will be fetched for newly added items, so long as no segments exist yet.</div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="MaxLookupsPerRun">Maximum API lookups per run</label>
+                    <input id="MaxLookupsPerRun" name="MaxLookupsPerRun" type="number" min="0" step="1" is="emby-input" autocomplete="off" />
+                    <div class="fieldDescription">Bounds large scans: how many API lookups a single run may perform. Default 400. Zero disables API lookups for the task. Large libraries may need more; re-running the scan continues where it left off.</div>
+                </div>
             </div>
 
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="EnablePreview" name="EnablePreview" type="checkbox" is="emby-checkbox" />
-                    <span>Provide preview segments</span>
-                </label>
-                <div class="fieldDescription">Include preview segments from TheIntroDB.</div>
-            </div>
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Privacy &amp; logging</h3>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="EnableAnonymousUsageReporting" name="EnableAnonymousUsageReporting" type="checkbox" is="emby-checkbox" />
+                        <span>Enable anonymous usage reporting</span>
+                    </label>
+                    <div class="fieldDescription">When enabled, anonymous usage metrics may be collected to help improve the plugin.</div>
+                </div>
 
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="EnableChapterCreation" name="EnableChapterCreation" type="checkbox" is="emby-checkbox" />
-                    <span>Create chapter entries for segments</span>
-                </label>
-                <div class="fieldDescription">When enabled, readable chapter entries are created alongside native markers
-                    (IntroStart, CreditsStart). Recaps and Previews have no native marker support in Emby and will be
-                    invisible without chapters. Disable this to hide the identification string from chapter names.</div>
-            </div>
-
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="IgnoreMediaWithExistingSegments" name="IgnoreMediaWithExistingSegments" type="checkbox" is="emby-checkbox" />
-                    <span>Ignore media that already has segments</span>
-                </label>
-                <div class="fieldDescription">When enabled, items that already have segments are skipped to avoid refetching.</div>
-            </div>
-
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="ProtectExistingIntroMarkers" name="ProtectExistingIntroMarkers" type="checkbox" is="emby-checkbox" />
-                    <span>Protect existing intro markers</span>
-                </label>
-                <div class="fieldDescription">Recommended. Any existing complete or partial native intro marker prevents TheIntroDB from changing that intro pair.</div>
-            </div>
-
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="ProtectExistingCreditsMarkers" name="ProtectExistingCreditsMarkers" type="checkbox" is="emby-checkbox" />
-                    <span>Protect existing credits markers</span>
-                </label>
-                <div class="fieldDescription">Recommended. An existing native credits marker remains authoritative.</div>
-            </div>
-
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="ReplaceExistingMarkers" name="ReplaceExistingMarkers" type="checkbox" is="emby-checkbox" />
-                    <span>Replace existing TheIntroDB-owned markers</span>
-                </label>
-                <div class="fieldDescription">Off by default. Only chapters carrying a matching durable TheIntroDB ownership token are removed before updated markers are applied. Native, manual, legacy and third-party chapters remain unchanged.</div>
-            </div>
-
-            <div class="inputContainer">
-                <label class="inputLabel inputLabelUnfocused" for="MaxLookupsPerRun">Maximum API lookups per run</label>
-                <input id="MaxLookupsPerRun" name="MaxLookupsPerRun" type="number" min="0" step="1" is="emby-input" autocomplete="off" />
-                <div class="fieldDescription">Bounds large scans: how many API lookups a single run may perform. Default 400. Zero disables API lookups for the task. Large libraries may need more; re-running the scan continues where it left off.</div>
-            </div>
-
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="EnableOnDemandFetch" name="EnableOnDemandFetch" type="checkbox" is="emby-checkbox" />
-                    <span>Automatically fetch segments on item addition</span>
-                </label>
-                <div class="fieldDescription">When enabled, segments will be fetched for newly added items, so long as no segments exist yet.</div>
-            </div>
-
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="EnableAnonymousUsageReporting" name="EnableAnonymousUsageReporting" type="checkbox" is="emby-checkbox" />
-                    <span>Enable anonymous usage reporting</span>
-                </label>
-                <div class="fieldDescription">When enabled, anonymous usage metrics may be collected to help improve the plugin.</div>
-            </div>
-
-            <div class="checkboxContainer checkboxContainer-withDescription">
-                <label class="emby-checkbox-label">
-                    <input id="EnableFileLogging" name="EnableFileLogging" type="checkbox" is="emby-checkbox" />
-                    <span>Enable file logging</span>
-                </label>
-                <div class="fieldDescription">When enabled, plugin logs are written to a separate file (data/theintrodb/theintrodb.log) instead of the main Emby log.</div>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="EnableFileLogging" name="EnableFileLogging" type="checkbox" is="emby-checkbox" />
+                        <span>Enable file logging</span>
+                    </label>
+                    <div class="fieldDescription">When enabled, plugin logs are written to a separate file (data/theintrodb/theintrodb.log) instead of the main Emby log.</div>
+                </div>
             </div>
 
             <div class="verticalSection">
@@ -147,11 +171,7 @@
                     <input id="MarkerRepairIntervalHours" name="MarkerRepairIntervalHours" type="number" min="0" step="1" is="emby-input" autocomplete="off" />
                     <div class="fieldDescription">How often the plugin checks items it has segments for and restores TheIntroDB markers that Emby may have overwritten (e.g. when Emby regenerates placeholder chapters for files without embedded chapters). Set to 0 to disable automatic repair.</div>
                 </div>
-                <p class="fieldDescription">
-                    Tip: Emby's library setting "Generate chapters for videos that don't contain embedded chapter information"
-                    (Dashboard &rarr; Libraries &rarr; edit a library) can overwrite TheIntroDB markers on files without embedded chapters.
-                    Disabling it there prevents the overwrite entirely.
-                </p>
+                <p class="fieldDescription">Tip: Emby's library setting "Generate chapters for videos that don't contain embedded chapter information" (Dashboard &rarr; Libraries &rarr; edit a library) can overwrite TheIntroDB markers on files without embedded chapters. Disabling it there prevents the overwrite entirely.</p>
             </div>
 
             <div class="verticalSection">
@@ -164,7 +184,7 @@
                 <button is="emby-button" type="button" class="raised button-submit block emby-button btnLoadSegments">
                     <span>Load Segments</span>
                 </button>
-                <pre class="segmentOutput" style="white-space: pre-wrap; margin-top: 1em;"></pre>
+                <pre class="segmentOutput" style="white-space: pre-wrap; margin-top: 1em"></pre>
             </div>
 
             <div>
@@ -173,40 +193,40 @@
                 </button>
             </div>
         </form>
-        </div>
+    </div>
 
-    <div id="ShowPickerOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); z-index: 100000; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto;">
-        <div style="width: min(980px, calc(100vw - 3rem)); margin: auto; background: hsla(var(--card-background-hue, 0), var(--card-background-saturation, 0%), var(--card-background-lightness, 100%), var(--card-background-alpha, 1)); color: hsla(var(--theme-text-color-hue, 0), var(--theme-text-color-saturation, 0%), var(--theme-text-color-lightness, 0%), var(--theme-text-color-alpha, 1)); border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);">
-            <div class="sectionTitleContainer flex align-items-center" style="justify-content: space-between;">
+    <div id="ShowPickerOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); z-index: 100000; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto">
+        <div style="width: min(980px, calc(100vw - 3rem)); margin: auto; background: hsla(var(--card-background-hue, 0), var(--card-background-saturation, 0%), var(--card-background-lightness, 100%), var(--card-background-alpha, 1)); color: hsla(var(--theme-text-color-hue, 0), var(--theme-text-color-saturation, 0%), var(--theme-text-color-lightness, 0%), var(--theme-text-color-alpha, 1)); border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45)">
+            <div class="sectionTitleContainer flex align-items-center" style="justify-content: space-between">
                 <div class="flex align-items-center">
-                    <button id="BackToLibraryList" is="emby-button" type="button" class="raised emby-button" style="display: none; margin-right: 0.75em;">Back</button>
-                    <h2 id="ShowPickerTitle" class="sectionTitle" style="margin: 0;">Choose Libraries</h2>
+                    <button id="BackToLibraryList" is="emby-button" type="button" class="raised emby-button" style="display: none; margin-right: 0.75em">Back</button>
+                    <h2 id="ShowPickerTitle" class="sectionTitle" style="margin: 0">Choose Libraries</h2>
                 </div>
                 <div>
                     <button id="CloseShowPicker" is="emby-button" type="button" class="raised emby-button">Cancel</button>
-                    <button id="DoneShowPicker" is="emby-button" type="button" class="raised emby-button" style="margin-left: 0.5em;">Done</button>
+                    <button id="DoneShowPicker" is="emby-button" type="button" class="raised emby-button" style="margin-left: 0.5em">Done</button>
                 </div>
             </div>
-            <div class="inputContainer" style="margin-top: 1em; margin-bottom: 0.25em;">
-                <button id="ToggleLibraryWhitelist" is="emby-button" type="button" class="raised emby-button" style="display: none;">Whitelist whole folder</button>
-                <div id="ShowPickerHint" class="fieldDescription" style="margin-top: 0.75em;">Open a library to browse its movies and shows. Inside a library, you can whitelist the whole folder or pick individual movies and shows.</div>
+            <div class="inputContainer" style="margin-top: 1em; margin-bottom: 0.25em">
+                <button id="ToggleLibraryWhitelist" is="emby-button" type="button" class="raised emby-button" style="display: none">Whitelist whole folder</button>
+                <div id="ShowPickerHint" class="fieldDescription" style="margin-top: 0.75em">Open a library to browse its movies and shows. Inside a library, you can whitelist the whole folder or pick individual movies and shows.</div>
             </div>
             <div class="inputContainer">
                 <label id="ShowPickerSearchLabel" class="inputLabel inputLabelUnfocused" for="ShowPickerSearch">Search libraries</label>
                 <input id="ShowPickerSearch" type="text" is="emby-input" autocomplete="off" />
             </div>
-            <div id="ShowPickerStatus" class="fieldDescription" style="margin-bottom: 1em;">Loading libraries...</div>
-            <div id="ShowPickerList" style="overflow-y: auto; border: 1px solid hsla(var(--theme-text-color-hue, 0), var(--theme-text-color-saturation, 0%), var(--theme-text-color-lightness, 0%), 0.12); border-radius: 0.5em; min-height: 12em; padding: 0.75em;"></div>
+            <div id="ShowPickerStatus" class="fieldDescription" style="margin-bottom: 1em">Loading libraries...</div>
+            <div id="ShowPickerList" style="overflow-y: auto; border: 1px solid hsla(var(--theme-text-color-hue, 0), var(--theme-text-color-saturation, 0%), var(--theme-text-color-lightness, 0%), 0.12); border-radius: 0.5em; min-height: 12em; padding: 0.75em"></div>
         </div>
     </div>
 
-    <div id="ApiStatsOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); z-index: 100001; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto;">
-        <div style="width: min(680px, calc(100vw - 3rem)); margin: auto; background: hsla(var(--card-background-hue, 0), var(--card-background-saturation, 0%), var(--card-background-lightness, 100%), var(--card-background-alpha, 1)); color: hsla(var(--theme-text-color-hue, 0), var(--theme-text-color-saturation, 0%), var(--theme-text-color-lightness, 0%), var(--theme-text-color-alpha, 1)); border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);">
-            <div class="sectionTitleContainer flex align-items-center" style="justify-content: space-between;">
-                <h2 class="sectionTitle" style="margin: 0;">API Key Stats</h2>
+    <div id="ApiStatsOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); z-index: 100001; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto">
+        <div style="width: min(680px, calc(100vw - 3rem)); margin: auto; background: hsla(var(--card-background-hue, 0), var(--card-background-saturation, 0%), var(--card-background-lightness, 100%), var(--card-background-alpha, 1)); color: hsla(var(--theme-text-color-hue, 0), var(--theme-text-color-saturation, 0%), var(--theme-text-color-lightness, 0%), var(--theme-text-color-alpha, 1)); border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45)">
+            <div class="sectionTitleContainer flex align-items-center" style="justify-content: space-between">
+                <h2 class="sectionTitle" style="margin: 0">API Key Stats</h2>
                 <button id="CloseApiStats" is="emby-button" type="button" class="raised emby-button">Close</button>
             </div>
-            <div id="ApiStatsContent" style="margin-top: 1em; overflow-y: auto;"></div>
+            <div id="ApiStatsContent" style="margin-top: 1em; overflow-y: auto"></div>
         </div>
     </div>
 </div>
