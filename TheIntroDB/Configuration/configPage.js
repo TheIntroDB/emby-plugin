@@ -891,6 +891,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                         page.querySelector("#EnableRecap").checked = config.EnableRecap !== false;
                         page.querySelector("#EnableCredits").checked = config.EnableCredits !== false;
                         page.querySelector("#EnablePreview").checked = config.EnablePreview !== false;
+                        page.querySelector("#EnableChapterCreation").checked = config.EnableChapterCreation !== false;
                         page.querySelector("#IgnoreMediaWithExistingSegments").checked = config.IgnoreMediaWithExistingSegments !== false;
                         page.querySelector("#ProtectExistingIntroMarkers").checked = config.ProtectExistingIntroMarkers !== false;
                         page.querySelector("#ProtectExistingCreditsMarkers").checked = config.ProtectExistingCreditsMarkers !== false;
@@ -1025,6 +1026,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 config.EnableRecap = page.querySelector("#EnableRecap").checked;
                 config.EnableCredits = page.querySelector("#EnableCredits").checked;
                 config.EnablePreview = page.querySelector("#EnablePreview").checked;
+                config.EnableChapterCreation = page.querySelector("#EnableChapterCreation").checked;
                 config.IgnoreMediaWithExistingSegments = page.querySelector("#IgnoreMediaWithExistingSegments").checked;
                 config.ProtectExistingIntroMarkers = page.querySelector("#ProtectExistingIntroMarkers").checked;
                 config.ProtectExistingCreditsMarkers = page.querySelector("#ProtectExistingCreditsMarkers").checked;

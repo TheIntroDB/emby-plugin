@@ -70,6 +70,16 @@
 
             <div class="checkboxContainer checkboxContainer-withDescription">
                 <label class="emby-checkbox-label">
+                    <input id="EnableChapterCreation" name="EnableChapterCreation" type="checkbox" is="emby-checkbox" />
+                    <span>Create chapter entries for segments</span>
+                </label>
+                <div class="fieldDescription">When enabled, readable chapter entries are created alongside native markers
+                    (IntroStart, CreditsStart). Recaps and Previews have no native marker support in Emby and will be
+                    invisible without chapters. Disable this to hide the identification string from chapter names.</div>
+            </div>
+
+            <div class="checkboxContainer checkboxContainer-withDescription">
+                <label class="emby-checkbox-label">
                     <input id="IgnoreMediaWithExistingSegments" name="IgnoreMediaWithExistingSegments" type="checkbox" is="emby-checkbox" />
                     <span>Ignore media that already has segments</span>
                 </label>
