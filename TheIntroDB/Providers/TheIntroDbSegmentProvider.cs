@@ -59,7 +59,7 @@ namespace TheIntroDB.Providers
           bool initializeConfiguration = true,
           bool trackUsage = true)
         {
-            _logger.Info("GetMediaSegmentsAsync called for ItemId={0}", itemId);
+            _logger.Debug("GetMediaSegmentsAsync called for ItemId={0}", itemId);
 
             if (Plugin.Instance is null)
             {
@@ -106,7 +106,7 @@ namespace TheIntroDB.Providers
                 tmdbId = GetTmdbId(movie);
                 tvdbId = GetTvdbId(movie);
                 imdbId = GetImdbId(movie);
-                _logger.Info("Movie: Name={0}, TmdbId={1}, TvdbId={2}, ImdbId={3}", item.Name, tmdbId, tvdbId, imdbId ?? "(none)");
+                _logger.Debug("Movie: Name={0}, TmdbId={1}, TvdbId={2}, ImdbId={3}", item.Name, tmdbId, tvdbId, imdbId ?? "(none)");
             }
             else if (item is Episode ep)
             {
@@ -115,7 +115,7 @@ namespace TheIntroDB.Providers
                 imdbId = GetImdbId(ep) ?? GetImdbId(ep.Series);
                 season = ep.ParentIndexNumber;
                 episode = ep.IndexNumber;
-                _logger.Info("Episode: Name={0}, Series={1}, S{2}E{3}, TmdbId={4}, TvdbId={5}, ImdbId={6}",
+                _logger.Debug("Episode: Name={0}, Series={1}, S{2}E{3}, TmdbId={4}, TvdbId={5}, ImdbId={6}",
                   item.Name, ep.SeriesName, season, episode, tmdbId, tvdbId, imdbId ?? "(none)");
             }
             else if (item is Video video)
@@ -126,7 +126,15 @@ namespace TheIntroDB.Providers
                 imdbId = GetImdbId(video);
                 season = video.ParentIndexNumber;
                 episode = video.IndexNumber;
-                _logger.Info("Video: Name={0}, TmdbId={1}, TvdbId={2}, ImdbId={3}, Season={4}, Episode={5}", item.Name, tmdbId, tvdbId, imdbId ?? "(none)", season, episode);
+                _logger.Debug("Video: Name={0}, TmdbId={1}, TvdbId={2}, ImdbId={3}, Season={4}, Episode={5}", item.Name, tmdbId, tvdbId, imdbId ?? "(none)", season, episode);
+            }
+
+            // Daily usage budget exhausted: the client parks until the bucket
+            // rolls over, so nothing would be sent. Skip before the fetch path
+            // instead of warning once per item in the scan.
+            if (TheIntroDbClient.IsDailyUsageExhausted(_logger))
+            {
+                return SegmentFetchResult.RateLimited();
             }
 
             if ((!tmdbId.HasValue || tmdbId.Value <= 0) && (!tvdbId.HasValue || tvdbId.Value <= 0) && string.IsNullOrWhiteSpace(imdbId))
@@ -149,15 +157,15 @@ namespace TheIntroDB.Providers
             _logger.Debug("Segment toggles: EnableIntro={0}, EnableRecap={1}, EnableCredits={2}, EnablePreview={3}, IgnoreMediaWithExistingSegments={4}",
               config.EnableIntro, config.EnableRecap, config.EnableCredits, config.EnablePreview, config.IgnoreMediaWithExistingSegments);
 
-            _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, tvdbId={1}, imdbId={2}, isMovie={3}, season={4}, episode={5}",
-              tmdbId, tvdbId, imdbId, isMovie, season, episode);
-
             var lookupKey = BuildNotFoundKey(isMovie, tmdbId, tvdbId, imdbId, season, episode);
             if (TheIntroDbNotFoundCache.Instance.TryGetHit(lookupKey))
             {
                 _logger.Debug("Skipping {0}: known not found in TheIntroDB (cached 404)", item.Name);
                 return SegmentFetchResult.NotAttempted();
             }
+
+            _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, tvdbId={1}, imdbId={2}, isMovie={3}, season={4}, episode={5}",
+              tmdbId, tvdbId, imdbId, isMovie, season, episode);
 
             var client = new TheIntroDbClient(_httpClient, Plugin.Instance, _logger);
             long? durationMs = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0 ?
@@ -176,7 +184,10 @@ namespace TheIntroDB.Providers
 
             if (mediaResult.IsRateLimited)
             {
-                _logger.Warn("TheIntroDB API rate limited for {0}", item.Name);
+                // The client already warned once per park period (or per real
+                // 429); warn per item here and a scan through an exhausted
+                // budget produces one line per library item.
+                _logger.Debug("TheIntroDB API rate limited for {0}", item.Name);
                 return SegmentFetchResult.RateLimited();
             }
 

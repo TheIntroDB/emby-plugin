@@ -26,6 +26,7 @@ namespace TheIntroDB.Api
         private static DateTime _lastRequestUtc = DateTime.MinValue;
         private static DateTime _nextAllowedSendUtc = DateTime.MinValue;
         private static int _consecutiveRateLimits;
+        private static DateTime _lastParkLoggedUtc = DateTime.MinValue;
 
         private readonly HttpClient _httpClient;
         private readonly Plugin _plugin;
@@ -49,25 +50,18 @@ namespace TheIntroDB.Api
             CancellationToken cancellationToken,
             bool trackUsage = true)
         {
+            if (IsDailyUsageExhausted(_logger))
+            {
+                return MediaFetchResult.RateLimited();
+            }
+
             if (DateTime.UtcNow < Plugin.RateLimitExpiryUtc)
             {
                 var waitUntil = Plugin.RateLimitExpiryUtc;
                 var delay = waitUntil - DateTime.UtcNow;
-                if (delay > MaxRateLimitDelay)
-                {
-                    // The daily usage bucket is exhausted and its reset can be
-                    // hours away (until UTC midnight). Sleeping the task is
-                    // pointless — report the park so the scan stops cleanly and
-                    // the user re-runs it later.
-                    _logger.Warn(
-                        "TheIntroDB API daily usage limit is exhausted until {0} UTC. Skipping request.",
-                        waitUntil);
-                    return MediaFetchResult.RateLimited();
-                }
-
                 if (delay > TimeSpan.Zero)
                 {
-                    _logger.Warn(
+                    _logger.Debug(
                         "TheIntroDB API rate limit is currently active. Waiting {0}s until {1} UTC to retry...",
                         (int)delay.TotalSeconds, waitUntil);
                     await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
@@ -353,6 +347,40 @@ namespace TheIntroDB.Api
             {
                 Plugin.TrackUsage(eventName, properties);
             }
+        }
+
+        /// <summary>
+        /// True when the daily usage bucket is exhausted (park longer than the
+        /// rate-limit ceiling) and the client would skip without sending.
+        /// Emits one warning per park period instead of one per skipped item.
+        /// </summary>
+        /// <param name="logger">Logger for the deduplicated warning.</param>
+        /// <returns>True when the daily bucket is exhausted and requests should be skipped.</returns>
+        internal static bool IsDailyUsageExhausted(ILogger logger)
+        {
+            var expiryUtc = Plugin.RateLimitExpiryUtc;
+            var delay = expiryUtc - DateTime.UtcNow;
+            if (delay <= MaxRateLimitDelay)
+            {
+                return false;
+            }
+
+            if (expiryUtc != _lastParkLoggedUtc)
+            {
+                // One warning per park period instead of one per skipped item.
+                _lastParkLoggedUtc = expiryUtc;
+                logger.Warn(
+                    "TheIntroDB API daily usage limit is exhausted until {0} UTC. Skipping request.",
+                    expiryUtc);
+            }
+            else
+            {
+                logger.Debug(
+                    "TheIntroDB API daily usage limit is exhausted until {0} UTC.",
+                    expiryUtc);
+            }
+
+            return true;
         }
 
         /// <summary>
