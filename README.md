@@ -55,12 +55,14 @@ TheIntroDB provides four segment types: **Intro**, **Recap**, **Credits**, and *
 
 | Segment | What you'll see in Emby clients |
 |---|---|
-| **Intro** | Emby's native **"Skip Intro"** button appears while the intro is playing. |
-| **Credits** | Emby's **"Coming Up Next"** overlay appears at the credits start (for episodes that have a next episode), letting you jump straight to it. There is no literal "Skip Credits" button. |
+| **Intro** | Emby's native **"Skip Intro"** button appears while the intro is playing. (if you have Emby Premiere)* |
+| **Credits** | Emby's **"Coming Up Next"** overlay appears at the credits start (for episodes that have a next episode), letting you jump straight to it. There is no literal "Skip Credits" button. (if you have Emby Premiere)* |
 | **Recap** | A regular chapter (`Recap (TheIntroDB)` → `Recap End (TheIntroDB)`) you can jump to from the chapter list. Emby has no recap skip button. |
 | **Preview** | A regular chapter (`Preview (TheIntroDB)` → `Preview End (TheIntroDB)`) you can jump to from the chapter list. Emby has no preview skip button. |
 
 > **Why no skip button for recap and preview?** This is a limitation of Emby, not the plugin. Emby's player only renders skip UI for intro markers (`IntroStart`/`IntroEnd`) and credits markers (`CreditsStart`) — those marker types are hard-coded into Emby's client apps. There is no plugin API for adding buttons to the player UI, and no "recap" or "preview" marker type exists in Emby. Until Emby adds them, recap and preview segments are exposed as chapters for manual navigation.
+
+* Emby Premiere is required to show the "Skip Intro" button, however, the segments are available to all users from the chapter list.
 
 ## Troubleshooting
 
