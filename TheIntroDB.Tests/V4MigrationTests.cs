@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Entities;
 using TheIntroDB.Api;
@@ -89,6 +90,22 @@ namespace TheIntroDB.Tests
         {
             Assert.Equal("?tmdb_id=615", TheIntroDbClient.BuildMediaQuery(615, 0, "tt0149460", true, null, null, null, null, null));
             Assert.Equal("?imdb_id=tt0149460", TheIntroDbClient.BuildMediaQuery(0, 0, "tt0149460", true, null, null, null, null, null));
+        }
+
+        [Fact]
+        public void NotFoundCacheKeyCarriesTheOrderAndThePinnedEpisodeId()
+        {
+            // Both change the answer, so neither may be dropped: a 404 recorded for one
+            // address must not suppress a later lookup of another, in particular after a
+            // series' metadata is corrected.
+            var dvd = TheIntroDbSegmentProvider.BuildNotFoundKey(false, 456, 71663, null, 1, 1, "dvd", 55452);
+            var aired = TheIntroDbSegmentProvider.BuildNotFoundKey(false, 456, 71663, null, 1, 1, null, 55452);
+            var otherPin = TheIntroDbSegmentProvider.BuildNotFoundKey(false, 456, 71663, null, 1, 1, "dvd", 55453);
+            var noPin = TheIntroDbSegmentProvider.BuildNotFoundKey(false, 456, 71663, null, 1, 1, "dvd", null);
+
+            Assert.Equal("episode:tvdb:71663:1:1:dvd:ep55452", dvd);
+            Assert.Equal(4, new[] { dvd, aired, otherPin, noPin }.Distinct().Count());
+            Assert.Equal("movie:tvdb:169", TheIntroDbSegmentProvider.BuildNotFoundKey(true, 0, 169, null, null, null, null, null));
         }
     }
 }

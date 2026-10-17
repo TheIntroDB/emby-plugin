@@ -156,7 +156,8 @@ namespace TheIntroDB.Providers
             // right and be another episode's data. No segments beats wrong segments.
             if (!isMovie && season.HasValue && episode.HasValue && mapping != null && (!tvdbId.HasValue || tvdbId.Value <= 0))
             {
-                LogOrderSkipOnce(itemId, item.Name);
+                var series = (item as Episode)?.Series;
+                LogOrderSkipOnce(series == null ? itemId : series.Id, series == null ? item.Name : series.Name);
                 return SegmentFetchResult.NotAttempted();
             }
 
@@ -188,7 +189,7 @@ namespace TheIntroDB.Providers
             _logger.Debug("Segment toggles: EnableIntro={0}, EnableRecap={1}, EnableCredits={2}, EnablePreview={3}, IgnoreMediaWithExistingSegments={4}",
               config.EnableIntro, config.EnableRecap, config.EnableCredits, config.EnablePreview, config.IgnoreMediaWithExistingSegments);
 
-            var lookupKey = BuildNotFoundKey(isMovie, tmdbId, tvdbId, imdbId, season, episode, mapping);
+            var lookupKey = BuildNotFoundKey(isMovie, tmdbId, tvdbId, imdbId, season, episode, mapping, tvdbEpisodeId);
             if (TheIntroDbNotFoundCache.Instance.TryGetHit(lookupKey))
             {
                 _logger.Debug("Skipping {0}: known not found in TheIntroDB (cached 404)", item.Name);
@@ -309,7 +310,7 @@ namespace TheIntroDB.Providers
             return supported;
         }
 
-        private static string BuildNotFoundKey(bool isMovie, int? tmdbId, int? tvdbId, string imdbId, int? season, int? episode, string mapping)
+        internal static string BuildNotFoundKey(bool isMovie, int? tmdbId, int? tvdbId, string imdbId, int? season, int? episode, string mapping, long? tvdbEpisodeId)
         {
             var type = isMovie ? "movie" : "episode";
             string idPart;
@@ -331,10 +332,14 @@ namespace TheIntroDB.Providers
                 return type + ":" + idPart;
             }
 
-            // The order is part of the address: "default" S6E1 and "alternate" S6E1 are
-            // different episodes, so a miss recorded for one must not answer for the other.
+            // The order is part of the address: "default" S6E1 and "dvd" S6E1 are
+            // different episodes, so a miss recorded for one must not answer for the
+            // other. The pinned episode id is part of it too — it outranks the numbers
+            // when it is sent, so a 404 recorded against one id must not suppress a
+            // later lookup whose id has been corrected.
             var orderPart = string.IsNullOrWhiteSpace(mapping) ? string.Empty : ":" + mapping;
-            return type + ":" + idPart + ":" + season + ":" + episode + orderPart;
+            var episodeIdPart = tvdbEpisodeId.HasValue && tvdbEpisodeId.Value > 0 ? ":ep" + tvdbEpisodeId.Value : string.Empty;
+            return type + ":" + idPart + ":" + season + ":" + episode + orderPart + episodeIdPart;
         }
 
         /// <summary>
