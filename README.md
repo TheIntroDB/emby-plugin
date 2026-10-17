@@ -6,7 +6,7 @@
 
 This plugin fetches intro, recap, credits, and preview timestamps from [TheIntroDB](https://theintrodb.org) for your Emby library. It uses this data to enable intro skipping features in compatible Emby clients.
 
-**Requirements:** Emby Server 4.7+. **TMDb metadata is recommended** for best accuracy (IMDb works as a fallback but is less accurate for TV).
+**Requirements:** Emby Server 4.7+. **TVDB metadata is recommended**: TVDB is TheIntroDB's identity, and it is what lets series with a non-default display order (DVD, absolute) resolve to the correct episode. TMDB and IMDb ids still work as fallbacks.
 
 **Important:** Segments are **not** fetched when you press play. They are populated when the **TheIntroDB Media Segment Scan** scheduled task runs. Until that task has run for your library, skip features may not be available.
 
@@ -37,15 +37,17 @@ Tip: use [Emby.GitHubRepoPluginInstall](https://github.com/bakes82/Emby.GitHubRe
 
 ### Metadata Requirements
 
-**TMDb is recommended.** The plugin matches content by TMDb ID for best accuracy. Ensure your libraries are configured to fetch TMDb IDs for your movies and shows.
+**TVDB is recommended.** The plugin addresses media by TVDB id when one is available, then falls back to TMDB, then IMDb.
 
-IMDb IDs work as a fallback but are less accurate for TV episodes. The plugin will use whichever IDs are available on your items.
+The series' **display order** is sent with every episode lookup, so a show set to DVD or absolute order is looked up by the numbers you actually have — not another order's. (Emby cannot express alternate/regional ordering, so those series cannot be represented; Jellyfin can.) The episode's own TVDB id is sent as well when it is distinct from the series id, which pins the exact episode record. A series with a non-default order and no TVDB id is skipped and logged once, because no other id can express the order.
+
+IMDb and TMDB ids are less accurate for TV episodes: those requests are always read in that provider's numbering.
 
 ## Configuration
 
 TheIntroDB plugin includes some configuration options to adjust and improve your experience.
 
-- **API Key**: You can enter your TheIntroDB API key to fetch your submissions even if they're still pending and prioritize yours in the averaging calculation.
+- **API Key**: You can enter your TheIntroDB API key to fetch your submissions even if they're still pending and prioritize yours in the averaging calculation. It also moves requests to the signed-in rate limits (120 requests per 10 s, 100,000 lookups per day instead of 30 and 5,000), which is what lets a full library scan finish in one run.
 - **Segment Toggles**: (Intro, Recap, Credits, and Preview — all enabled by default) You can disable each segment individually so they're not applied when fetching.
 - **Ignore Media That Already Has Segments**: (Enabled by default) Prevent refetching of media that already has segments. This is recommended for large libraries.
 

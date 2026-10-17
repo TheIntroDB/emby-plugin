@@ -20,7 +20,7 @@
             <p class="fieldDescription">
                 Segment data (intro, recap, credits, preview) is fetched from
                 <a href="https://theintrodb.org" target="_blank" rel="noopener noreferrer">TheIntroDB API</a>
-                using each item's TMDB or IMDB ID. Segments are not loaded when you press play; run the TheIntroDB media segment scan scheduled task to populate them.
+                (v4) using each item's TVDB, TMDB or IMDB ID. TVDB is preferred: it is the API's identity, and it is what lets series with a non-default display order (DVD, absolute) resolve to the right episode. Segments are not loaded when you press play; run the TheIntroDB media segment scan scheduled task to populate them.
             </p>
 
             <div class="verticalSection">
@@ -28,7 +28,7 @@
                 <div class="inputContainer">
                     <label class="inputLabel inputLabelUnfocused" for="ApiKey">API key (optional)</label>
                     <input id="ApiKey" name="ApiKey" type="password" is="emby-input" autocomplete="off" />
-                    <div class="fieldDescription">Optional Bearer token; when set, your pending and accepted submissions are weighted higher in results.</div>
+                    <div class="fieldDescription">Optional Bearer token; when set, your pending and accepted submissions are weighted higher in results, and requests use the signed-in rate limits (120 requests per 10 seconds, 100,000 lookups per day instead of 30 and 5,000). A key is what lets a large library scan finish in one run.</div>
                     <div id="ApiKeyValidationStatus" class="fieldDescription" style="display: none; margin-top: 0.75em; align-items: center; gap: 0.5em"></div>
                 </div>
             </div>

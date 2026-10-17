@@ -26,4 +26,8 @@
     <EmbeddedResource Include="thumb.png" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TheIntroDB.Tests" />
+  </ItemGroup>
+
 </Project>

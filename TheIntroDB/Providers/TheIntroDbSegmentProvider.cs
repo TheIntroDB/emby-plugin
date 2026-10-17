@@ -8,6 +8,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
 using TheIntroDB.Api;
 using TheIntroDB.Models;
@@ -22,6 +23,12 @@ namespace TheIntroDB.Providers
     public class TheIntroDbSegmentProvider
     {
         private static readonly HttpClient _httpClient = new HttpClient();
+
+        // One warning per series whose display order cannot be expressed, not one per
+        // episode of it. Static because a provider instance is short-lived (one per
+        // scan or per event), so an instance field would not dedupe a scan.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, byte> _orderSkipsLogged =
+            new System.Collections.Concurrent.ConcurrentDictionary<Guid, byte>();
 
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
@@ -99,6 +106,8 @@ namespace TheIntroDB.Providers
             bool isMovie = false;
             int? season = null;
             int? episode = null;
+            string mapping = null;
+            long? tvdbEpisodeId = null;
 
             if (item is Movie movie)
             {
@@ -110,13 +119,26 @@ namespace TheIntroDB.Providers
             }
             else if (item is Episode ep)
             {
-                tmdbId = GetTmdbId(ep) ?? GetTmdbId(ep.Series);
-                tvdbId = GetTvdbId(ep) ?? GetTvdbId(ep.Series);
+                tmdbId = GetTmdbId(ep.Series);
+                tvdbId = GetTvdbId(ep.Series);
                 imdbId = GetImdbId(ep) ?? GetImdbId(ep.Series);
                 season = ep.ParentIndexNumber;
                 episode = ep.IndexNumber;
-                _logger.Debug("Episode: Name={0}, Series={1}, S{2}E{3}, TmdbId={4}, TvdbId={5}, ImdbId={6}",
-                  item.Name, ep.SeriesName, season, episode, tmdbId, tvdbId, imdbId ?? "(none)");
+
+                // Emby numbers an episode in the series' display order — the order the
+                // metadata fetcher used. TVDB's default order is what TheIntroDB stores,
+                // so a series with any other order has to say which one its numbers are
+                // in, or the API answers a different episode (issue #31: Futurama under
+                // `alternate`, where S07E01 is default S06E01).
+                mapping = GetDisplayOrder(ep.Series);
+
+                // The episode's own TVDB id pins one exact record. Emby stores provider
+                // ids per item, and which id lands on an episode varies by fetcher, so
+                // it is only used as a pin when it is distinct from the series id.
+                tvdbEpisodeId = GetTvdbEpisodeId(ep, tvdbId);
+
+                _logger.Debug("Episode: Name={0}, Series={1}, S{2}E{3}, TmdbId={4}, TvdbId={5}, ImdbId={6}, Order={7}, TvdbEpisodeId={8}",
+                  item.Name, ep.SeriesName, season, episode, tmdbId, tvdbId, imdbId ?? "(none)", mapping ?? "default", tvdbEpisodeId);
             }
             else if (item is Video video)
             {
@@ -127,6 +149,16 @@ namespace TheIntroDB.Providers
                 season = video.ParentIndexNumber;
                 episode = video.IndexNumber;
                 _logger.Debug("Video: Name={0}, TmdbId={1}, TvdbId={2}, ImdbId={3}, Season={4}, Episode={5}", item.Name, tmdbId, tvdbId, imdbId ?? "(none)", season, episode);
+            }
+
+            // A non-default display order can only be honoured with a TVDB identity: a
+            // tmdb_id request is always read as TMDB numbering, so answering would look
+            // right and be another episode's data. No segments beats wrong segments.
+            if (!isMovie && season.HasValue && episode.HasValue && mapping != null && (!tvdbId.HasValue || tvdbId.Value <= 0))
+            {
+                var series = (item as Episode)?.Series;
+                LogOrderSkipOnce(series == null ? itemId : series.Id, series == null ? item.Name : series.Name);
+                return SegmentFetchResult.NotAttempted();
             }
 
             // Daily usage budget exhausted: the client parks until the bucket
@@ -157,15 +189,15 @@ namespace TheIntroDB.Providers
             _logger.Debug("Segment toggles: EnableIntro={0}, EnableRecap={1}, EnableCredits={2}, EnablePreview={3}, IgnoreMediaWithExistingSegments={4}",
               config.EnableIntro, config.EnableRecap, config.EnableCredits, config.EnablePreview, config.IgnoreMediaWithExistingSegments);
 
-            var lookupKey = BuildNotFoundKey(isMovie, tmdbId, tvdbId, imdbId, season, episode);
+            var lookupKey = BuildNotFoundKey(isMovie, tmdbId, tvdbId, imdbId, season, episode, mapping, tvdbEpisodeId);
             if (TheIntroDbNotFoundCache.Instance.TryGetHit(lookupKey))
             {
                 _logger.Debug("Skipping {0}: known not found in TheIntroDB (cached 404)", item.Name);
                 return SegmentFetchResult.NotAttempted();
             }
 
-            _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, tvdbId={1}, imdbId={2}, isMovie={3}, season={4}, episode={5}",
-              tmdbId, tvdbId, imdbId, isMovie, season, episode);
+            _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, tvdbId={1}, imdbId={2}, isMovie={3}, season={4}, episode={5}, order={6}, tvdbEpisodeId={7}",
+              tmdbId, tvdbId, imdbId, isMovie, season, episode, mapping ?? "default", tvdbEpisodeId);
 
             var client = new TheIntroDbClient(_httpClient, Plugin.Instance, _logger);
             long? durationMs = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0 ?
@@ -173,7 +205,7 @@ namespace TheIntroDB.Providers
               (long?)null;
             var mediaResult = await client.GetMediaAsync(
                 tmdbId, tvdbId, imdbId, isMovie, season, episode,
-                durationMs, cancellationToken, trackUsage).ConfigureAwait(false);
+                durationMs, cancellationToken, trackUsage, mapping, tvdbEpisodeId).ConfigureAwait(false);
 
             if (mediaResult.IsNotFound)
             {
@@ -278,26 +310,119 @@ namespace TheIntroDB.Providers
             return supported;
         }
 
-        private static string BuildNotFoundKey(bool isMovie, int? tmdbId, int? tvdbId, string imdbId, int? season, int? episode)
+        internal static string BuildNotFoundKey(bool isMovie, int? tmdbId, int? tvdbId, string imdbId, int? season, int? episode, string mapping, long? tvdbEpisodeId)
         {
             var type = isMovie ? "movie" : "episode";
             string idPart;
-            if (tmdbId.HasValue && tmdbId.Value > 0)
-            {
-                idPart = "tmdb:" + tmdbId.Value;
-            }
-            else if (tvdbId.HasValue && tvdbId.Value > 0)
+            if (tvdbId.HasValue && tvdbId.Value > 0)
             {
                 idPart = "tvdb:" + tvdbId.Value;
+            }
+            else if (tmdbId.HasValue && tmdbId.Value > 0)
+            {
+                idPart = "tmdb:" + tmdbId.Value;
             }
             else
             {
                 idPart = "imdb:" + imdbId;
             }
 
-            return isMovie
-                ? type + ":" + idPart
-                : type + ":" + idPart + ":" + season + ":" + episode;
+            if (isMovie)
+            {
+                return type + ":" + idPart;
+            }
+
+            // The order is part of the address: "default" S6E1 and "dvd" S6E1 are
+            // different episodes, so a miss recorded for one must not answer for the
+            // other. The pinned episode id is part of it too — it outranks the numbers
+            // when it is sent, so a 404 recorded against one id must not suppress a
+            // later lookup whose id has been corrected.
+            var orderPart = string.IsNullOrWhiteSpace(mapping) ? string.Empty : ":" + mapping;
+            var episodeIdPart = tvdbEpisodeId.HasValue && tvdbEpisodeId.Value > 0 ? ":ep" + tvdbEpisodeId.Value : string.Empty;
+            return type + ":" + idPart + ":" + season + ":" + episode + orderPart + episodeIdPart;
+        }
+
+        /// <summary>
+        /// Reads the series' display order as an explicit TVDB order name, or null when
+        /// the series numbers its episodes in the default (aired) order.
+        /// </summary>
+        /// <remarks>
+        /// Emby's Series.DisplayOrder is an enum with three values (Aired, Dvd,
+        /// Absolute), not a free-form string like Jellyfin's. Aired is the ordinary
+        /// order — the one TheIntroDB stores — so it is reported as no preference and
+        /// costs no conversion. Emby cannot express alternate/regional ordering at all.
+        /// </remarks>
+        /// <param name="series">The series the episode belongs to.</param>
+        /// <returns>The order name to send as mapping, or null.</returns>
+        internal static string GetDisplayOrder(Series series)
+        {
+            if (series == null)
+            {
+                return null;
+            }
+
+            switch (series.DisplayOrder)
+            {
+                case SeriesDisplayOrder.Dvd:
+                    return "dvd";
+                case SeriesDisplayOrder.Absolute:
+                    return "absolute";
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// Returns the episode's own TVDB id, when it carries one that is distinct from
+        /// the series id.
+        /// </summary>
+        /// <remarks>
+        /// Emby populates provider ids per item and which id lands on an Episode depends
+        /// on the fetcher: some store the episode record, others repeat the series id.
+        /// Only the former is a useful pin, and sending the series id as an episode id
+        /// would make the API look for an episode that does not exist.
+        /// </remarks>
+        /// <param name="episode">The episode.</param>
+        /// <param name="seriesTvdbId">The series' TVDB id, already resolved.</param>
+        /// <returns>The episode id to pin, or null.</returns>
+        private static long? GetTvdbEpisodeId(BaseItem episode, int? seriesTvdbId)
+        {
+            if (episode?.ProviderIds == null)
+            {
+                return null;
+            }
+
+            var id = GetProviderId(episode, "Tvdb");
+            long parsed;
+            if (string.IsNullOrWhiteSpace(id)
+                || !long.TryParse(id, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out parsed)
+                || parsed <= 0)
+            {
+                return null;
+            }
+
+            if (seriesTvdbId.HasValue && seriesTvdbId.Value > 0 && parsed == seriesTvdbId.Value)
+            {
+                return null;
+            }
+
+            return parsed;
+        }
+
+        /// <summary>
+        /// Logs the "non-default order without a TVDB id" skip once per series rather
+        /// than once per episode, which would be hundreds of lines on a large show.
+        /// </summary>
+        /// <param name="itemId">Emby id of the item being skipped.</param>
+        /// <param name="name">Item name, for the log line.</param>
+        private void LogOrderSkipOnce(Guid itemId, string name)
+        {
+            if (_orderSkipsLogged.TryAdd(itemId, 0))
+            {
+                _logger.Warn(
+                  "Skipping {0}: the series uses a non-default display order, but Emby carries no TVDB id to express it against. Add TVDB metadata to the series so the API can convert the episode numbers.",
+                  name);
+            }
         }
 
         private static int? GetTmdbId(BaseItem item)
