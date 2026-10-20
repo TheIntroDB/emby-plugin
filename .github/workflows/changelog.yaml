@@ -1,0 +1,30 @@
+name: '📝 Update Release Draft'
+
+# Keeps a draft GitHub Release up to date with the PRs merged into main, using
+# .github/release-drafter.yml. Publishing the draft (with its pre-filled tag) is
+# what triggers publish.yaml, which builds the plugin and uploads the assets.
+#
+# This replaces the jellyfin/jellyfin-meta-plugins changelog workflow, which
+# assumes Jellyfin's single-integer versioning (tag v2 -> version 2.0.0.0) and
+# cannot work with this repo's 4-part versions (tag v1.3.0.0).
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  update_release_draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update Draft
+        uses: release-drafter/release-drafter@34d80673e067bdc0c24568d3af899c216adcfaa9 # v7.7.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
