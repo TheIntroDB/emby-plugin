@@ -45,13 +45,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          draft_id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.draft)][0].id // empty')
+          # A release PATCH that omits tag_name clears the tag GitHub shows for a draft
+          # (it becomes `untagged-...`), so the tag Release Drafter just set is sent back.
+          draft=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.draft)][0]')
+          draft_id=$(printf '%s' "$draft" | jq -r '.id // empty')
           if [ -z "$draft_id" ]; then
             echo "No draft release to fill in."
             exit 0
           fi
 
-          body=$(gh api "repos/$GITHUB_REPOSITORY/releases/$draft_id" --jq '.body // ""')
+          draft_tag=$(printf '%s' "$draft" | jq -r '.tag_name // empty')
+          body=$(printf '%s' "$draft" | jq -r '.body // ""')
           if ! printf '%s' "$body" | grep -q "No changes"; then
             echo "The draft already lists pull requests; leaving it alone."
             exit 0
@@ -72,7 +76,11 @@ jobs:
 
           newbody=$(printf "## What's New\n\n### Commits\n\n%s\n" "$commits")
 
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$draft_id" \
-            -f "body=$newbody" > /dev/null
+          args=(-f "body=$newbody")
+          if [ -n "$draft_tag" ]; then
+            args+=(-f "tag_name=$draft_tag")
+          fi
 
-          echo "Draft filled with $(printf '%s\n' "$commits" | wc -l) commits since ${last_tag:-the beginning of history}."
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$draft_id" "${args[@]}" > /dev/null
+
+          echo "Draft ${draft_tag:-untagged} filled with $(printf '%s\n' "$commits" | wc -l) commits since ${last_tag:-the beginning of history}."
