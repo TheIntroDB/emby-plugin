@@ -1,6 +1,6 @@
 name: '📝 Update Release Draft'
 
-# Keeps a draft GitHub Release up to date with the PRs merged into main, using
+# Keeps a draft GitHub Release up to date with what is in main, using
 # .github/release-drafter.yml. Publishing the draft (with its pre-filled tag) is
 # what triggers publish.yaml, which builds the plugin and uploads the assets.
 #
@@ -24,7 +24,90 @@ jobs:
   update_release_draft:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          # The commits of the unreleased range are read from history.
+          fetch-depth: 0
+
       - name: Update Draft
         uses: release-drafter/release-drafter@34d80673e067bdc0c24568d3af899c216adcfaa9 # v7.7.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Release Drafter renders merged pull requests only, so work pushed straight to main
+      # leaves it with an empty draft at its default patch version — a feature release would
+      # draft a bug-fix version with a changelog reading "No changes". When the draft has no
+      # pull-request entries, the commits since the last published release are listed
+      # instead and the version is raised for what those commits contain: a breaking change
+      # raises the major, a feature the minor, anything else the patch.
+      - name: Fill in a draft Release Drafter could not see
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          draft_id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.draft)][0].id // empty')
+          if [ -z "$draft_id" ]; then
+            echo "No draft release to fill in."
+            exit 0
+          fi
+
+          body=$(gh api "repos/$GITHUB_REPOSITORY/releases/$draft_id" --jq '.body // ""')
+          if ! printf '%s' "$body" | grep -q "No changes"; then
+            echo "The draft already lists pull requests; leaving it alone."
+            exit 0
+          fi
+
+          last_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name // empty' 2>/dev/null || true)
+          range="HEAD"
+          if [ -n "$last_tag" ]; then
+            range="$last_tag..HEAD"
+          fi
+
+          subjects=$(git log --no-merges --reverse --pretty='%s' "$range")
+          if [ -z "$subjects" ]; then
+            echo "No commits since ${last_tag:-the beginning of history}."
+            exit 0
+          fi
+
+          commits=$(git log --no-merges --reverse \
+            --pretty="* %s ([%h](https://github.com/$GITHUB_REPOSITORY/commit/%h))" "$range")
+
+          bump=patch
+          if printf '%s\n' "$subjects" | grep -qE '^[a-z]+(\([^)]*\))?!:' \
+            || printf '%s' "$subjects" | grep -q 'BREAKING CHANGE'; then
+            bump=major
+          elif printf '%s\n' "$subjects" | grep -qiE '^feat(\([^)]*\))?:'; then
+            bump=minor
+          fi
+
+          base="${last_tag#v}"
+          IFS='.' read -r major minor patch build <<< "$base"
+          major=${major:-0}
+          minor=${minor:-0}
+          patch=${patch:-0}
+          case "$bump" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            *)
+              patch=$((patch + 1))
+              ;;
+          esac
+          next="$major.$minor.$patch.0"
+
+          newbody=$(printf "## What's New\n\n### Commits\n\n%s\n" "$commits")
+
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$draft_id" \
+            -f "tag_name=v$next" \
+            -f "name=Version $next" \
+            -f "body=$newbody" > /dev/null
+
+          echo "Draft set to v$next ($bump bump) with $(printf '%s\n' "$subjects" | wc -l) commits since ${last_tag:-the beginning of history}."
