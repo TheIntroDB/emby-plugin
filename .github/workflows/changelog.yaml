@@ -35,13 +35,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Release Drafter renders merged pull requests only, so work pushed straight to main
-      # leaves it with an empty draft at its default patch version — a feature release would
-      # draft a bug-fix version with a changelog reading "No changes". When the draft has no
-      # pull-request entries, the commits since the last published release are listed
-      # instead and the version is raised for what those commits contain: a breaking change
-      # raises the major, a feature the minor, anything else the patch.
-      - name: Fill in a draft Release Drafter could not see
+      # Release Drafter only lists merged pull requests, so work pushed straight to main
+      # leaves the draft reading "No changes". When that is the case, the commits since the
+      # last published release are listed instead. The version comes from
+      # .github/release-drafter.yml (its minor-version floor, see the comment there).
+      - name: List the commits a pull-request-only draft cannot see
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -65,49 +63,16 @@ jobs:
             range="$last_tag..HEAD"
           fi
 
-          subjects=$(git log --no-merges --reverse --pretty='%s' "$range")
-          if [ -z "$subjects" ]; then
+          commits=$(git log --no-merges --reverse \
+            --pretty="* %s ([%h](https://github.com/$GITHUB_REPOSITORY/commit/%h))" "$range")
+          if [ -z "$commits" ]; then
             echo "No commits since ${last_tag:-the beginning of history}."
             exit 0
           fi
 
-          commits=$(git log --no-merges --reverse \
-            --pretty="* %s ([%h](https://github.com/$GITHUB_REPOSITORY/commit/%h))" "$range")
-
-          bump=patch
-          if printf '%s\n' "$subjects" | grep -qE '^[a-z]+(\([^)]*\))?!:' \
-            || printf '%s' "$subjects" | grep -q 'BREAKING CHANGE'; then
-            bump=major
-          elif printf '%s\n' "$subjects" | grep -qiE '^feat(\([^)]*\))?:'; then
-            bump=minor
-          fi
-
-          base="${last_tag#v}"
-          IFS='.' read -r major minor patch build <<< "$base"
-          major=${major:-0}
-          minor=${minor:-0}
-          patch=${patch:-0}
-          case "$bump" in
-            major)
-              major=$((major + 1))
-              minor=0
-              patch=0
-              ;;
-            minor)
-              minor=$((minor + 1))
-              patch=0
-              ;;
-            *)
-              patch=$((patch + 1))
-              ;;
-          esac
-          next="$major.$minor.$patch.0"
-
           newbody=$(printf "## What's New\n\n### Commits\n\n%s\n" "$commits")
 
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$draft_id" \
-            -f "tag_name=v$next" \
-            -f "name=Version $next" \
             -f "body=$newbody" > /dev/null
 
-          echo "Draft set to v$next ($bump bump) with $(printf '%s\n' "$subjects" | wc -l) commits since ${last_tag:-the beginning of history}."
+          echo "Draft filled with $(printf '%s\n' "$commits" | wc -l) commits since ${last_tag:-the beginning of history}."

@@ -62,6 +62,19 @@ categories:
   # Catch-all: an empty `when` collects the changes no category above matched.
   - title: ':package: Other changes'
 
+  # A floor under every draft version: never below a minor.
+  #
+  # This repo carries work pushed straight to main, and Release Drafter reads merged pull
+  # requests only, so it cannot tell a feature release from a fix-only one here — this
+  # release's port of the refresh feature would draft v1.2.1.0, where the sibling
+  # jellyfin plugin, whose same change arrived as a `feat:` pull request, drafts v1.3.0.0.
+  # A release with no entries at all would otherwise take the patch default.
+  #
+  # Set `semver-increment: patch` to draft patch versions again, or retype the tag on the
+  # draft before publishing. A breaking change still escalates past this to a major.
+  - type: version-resolver
+    semver-increment: minor
+
 template: |
   ## What's New
 
