@@ -893,6 +893,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                         page.querySelector("#EnablePreview").checked = config.EnablePreview !== false;
                         page.querySelector("#EnableChapterCreation").checked = config.EnableChapterCreation !== false;
                         page.querySelector("#IgnoreMediaWithExistingSegments").checked = config.IgnoreMediaWithExistingSegments !== false;
+                        page.querySelector("#RefreshAfterDays").value = config.RefreshAfterDays != null ? config.RefreshAfterDays : 30;
                         page.querySelector("#ProtectExistingIntroMarkers").checked = config.ProtectExistingIntroMarkers !== false;
                         page.querySelector("#ProtectExistingCreditsMarkers").checked = config.ProtectExistingCreditsMarkers !== false;
                         page.querySelector("#ReplaceExistingMarkers").checked = config.ReplaceExistingMarkers === true;
@@ -1028,6 +1029,8 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 config.EnablePreview = page.querySelector("#EnablePreview").checked;
                 config.EnableChapterCreation = page.querySelector("#EnableChapterCreation").checked;
                 config.IgnoreMediaWithExistingSegments = page.querySelector("#IgnoreMediaWithExistingSegments").checked;
+                var refreshAfterDays = parseInt(page.querySelector("#RefreshAfterDays").value, 10);
+                config.RefreshAfterDays = isNaN(refreshAfterDays) || refreshAfterDays < 0 ? 30 : refreshAfterDays;
                 config.ProtectExistingIntroMarkers = page.querySelector("#ProtectExistingIntroMarkers").checked;
                 config.ProtectExistingCreditsMarkers = page.querySelector("#ProtectExistingCreditsMarkers").checked;
                 config.ReplaceExistingMarkers = page.querySelector("#ReplaceExistingMarkers").checked;

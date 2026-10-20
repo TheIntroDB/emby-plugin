@@ -217,12 +217,97 @@ namespace TheIntroDB.EntryPoints
         private void LibraryManager_ItemAdded(object sender, ItemChangeEventArgs e)
         {
             var item = e?.Item;
-            if (item is not Episode && item is not Movie)
+            if (!ShouldFetchOnItemAdded(item, ResolveSeries(item)))
             {
                 return;
             }
 
             _ = TrackTaskAsync(OnDemandFetchAsync(item, "item_added", _cts.Token));
+        }
+
+        /// <summary>
+        /// The series an item reports, resolved through the library when the episode does not
+        /// carry it. Which id lands on a series depends on the metadata fetcher, so the lookup
+        /// is the fallback rather than the first choice.
+        /// </summary>
+        /// <param name="item">The item.</param>
+        /// <returns>The series, or null when the item is not an episode or has no series.</returns>
+        private Series ResolveSeries(BaseItem item)
+        {
+            if (!(item is Episode episode))
+            {
+                return null;
+            }
+
+            if (episode.Series != null)
+            {
+                return episode.Series;
+            }
+
+            return episode.SeriesId != 0
+                ? _libraryManager.GetItemById(episode.SeriesId) as Series
+                : null;
+        }
+
+        /// <summary>
+        /// Whether a newly added item is looked up right away. An episode is added before its
+        /// metadata download, often with only an IMDb id while its season/episode numbers come
+        /// from TVDB or TMDB. The API reads an <c>imdb_id</c> request in IMDb's numbering
+        /// (see issue #31), so fetching then answers with another episode's timestamps and the
+        /// item is never fetched again. Such an episode waits for the download
+        /// (<see cref="ShouldFetchOnItemUpdated"/>), as does one whose series is not known yet.
+        /// </summary>
+        /// <param name="item">The added item.</param>
+        /// <param name="series">The series the item reports, if it is an episode.</param>
+        /// <returns>Whether to fetch now.</returns>
+        internal static bool ShouldFetchOnItemAdded(BaseItem item, Series series)
+        {
+            if (item is Movie)
+            {
+                return true;
+            }
+
+            if (!(item is Episode))
+            {
+                return false;
+            }
+
+            return HasSeriesIdentity(series);
+        }
+
+        /// <summary>
+        /// Whether an updated item is looked up: after a metadata download, which is when an
+        /// item added without its ids gets them.
+        /// </summary>
+        /// <param name="e">The update.</param>
+        /// <returns>Whether to fetch now.</returns>
+        internal static bool ShouldFetchOnItemUpdated(ItemChangeEventArgs e)
+            => e?.Item is Episode || e?.Item is Movie
+                ? e.UpdateReason.HasFlag(ItemUpdateType.MetadataDownload)
+                : false;
+
+        /// <summary>
+        /// Whether a series has an id the API reads episode numbers against reliably.
+        /// Emby exposes provider ids per item as strings, so the keys are checked directly.
+        /// </summary>
+        /// <param name="series">The series the episode reports, if any.</param>
+        /// <returns>Whether it has a TVDB or TMDB id.</returns>
+        internal static bool HasSeriesIdentity(Series series)
+        {
+            if (series?.ProviderIds == null)
+            {
+                return false;
+            }
+
+            return HasUsableProviderId(series, "Tvdb") || HasUsableProviderId(series, "Tmdb");
+        }
+
+        private static bool HasUsableProviderId(BaseItem item, string provider)
+        {
+            string value;
+            return item.ProviderIds != null
+                && item.ProviderIds.TryGetValue(provider, out value)
+                && !string.IsNullOrWhiteSpace(value);
         }
 
         private void LibraryManager_ItemUpdated(object sender, ItemChangeEventArgs e)
@@ -252,8 +337,13 @@ namespace TheIntroDB.EntryPoints
                     return;
                 }
 
-                // Also trigger on-demand fetch for updated items that have no segments yet
-                _ = TrackTaskAsync(OnDemandFetchAsync(item, "item_updated", _cts.Token));
+                // Fetch only after a metadata download: any other update (an image, a manual
+                // edit) can fire while the ids are still missing, which is what makes the
+                // lookup answer for another episode. The markers are rewritten either way.
+                if (ShouldFetchOnItemUpdated(e))
+                {
+                    _ = TrackTaskAsync(OnDemandFetchAsync(item, "metadata_download", _cts.Token));
+                }
 
                 _ = TrackTaskAsync(Task.Run(() => ApplyMarkers(item, config), _cts.Token));
             }
@@ -517,21 +607,32 @@ namespace TheIntroDB.EntryPoints
 
                 try
                 {
-                    // Check if segments already exist (under the gate to avoid races)
+                    // Check what is stored (under the gate to avoid races). Own segments only
+                    // hold the item back until they are due for a refresh: with
+                    // IgnoreMediaWithExistingSegments on they would otherwise never be
+                    // fetched again, so a corrected submission would never arrive.
                     var existing = _segmentRepository.GetSegments(internalId);
-                    if (existing != null && existing.Count > 0)
+                    var ownCount = existing == null ? 0 : existing.Count;
+                    var refreshDue = SegmentRefreshPolicy.IsRefreshDue(
+                        ownCount,
+                        _segmentRepository.GetLastCheckedUtc(internalId),
+                        config.RefreshAfterDays,
+                        internalId,
+                        DateTime.UtcNow);
+
+                    if (SegmentRefreshPolicy.ShouldKeepExistingSegments(ownCount, refreshDue))
                     {
                         _logger.Debug("On-demand fetch skipped ({0}): segments already exist for {1}", trigger, item.Name);
                         return;
                     }
 
-                    _logger.Info("On-demand segment fetch triggered ({0}) for {1} ({2})", trigger, item.Name, item.GetType().Name);
+                    _logger.Debug("On-demand segment fetch triggered ({0}) for {1} ({2})", trigger, item.Name, item.GetType().Name);
 
                     var result = await _segmentProvider.GetMediaSegmentsAsync(item.Id, cancellationToken).ConfigureAwait(false);
 
                     if (result.Segments == null || result.Segments.Count == 0)
                     {
-                        _logger.Info("On-demand segment fetch ({0}): no segments returned for {1}", trigger, item.Name);
+                        _logger.Debug("On-demand segment fetch ({0}): no segments returned for {1}", trigger, item.Name);
                         return;
                     }
 
@@ -546,7 +647,7 @@ namespace TheIntroDB.EntryPoints
                     _segmentRepository.ReplaceSegments(internalId, storedSegments, DateTime.UtcNow);
                     _chapterWriter.ApplyMarkers(item, storedSegments, config);
 
-                    _logger.Info("On-demand segment fetch completed ({0}) for {1}: {2} segments, markers applied", trigger, item.Name, storedSegments.Count);
+                    _logger.Debug("On-demand segment fetch completed ({0}) for {1}: {2} segments, markers applied", trigger, item.Name, storedSegments.Count);
                 }
                 finally
                 {

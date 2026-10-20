@@ -17,6 +17,7 @@ using TheIntroDB.Configuration;
 using TheIntroDB.Data;
 using TheIntroDB.Models;
 using TheIntroDB.Providers;
+using TheIntroDB.Services;
 
 namespace TheIntroDB.EntryPoints
 {
@@ -211,17 +212,30 @@ namespace TheIntroDB.EntryPoints
 
                 if (!IsItemAllowedByFilters(item, config))
                 {
+                    _logger.Debug("On-demand fetch skipped (playback_start): {0} not in selected libraries/shows", item.Name);
                     return;
                 }
 
                 var internalId = item.InternalId;
+
+                // Own segments only hold the item back until they are due for a refresh:
+                // with IgnoreMediaWithExistingSegments on they would otherwise never be
+                // fetched again, so a corrected submission would never reach playback.
                 var existingSegments = _repository.GetSegments(internalId);
-                if (existingSegments != null && existingSegments.Count > 0)
+                var ownCount = existingSegments == null ? 0 : existingSegments.Count;
+                var refreshDue = SegmentRefreshPolicy.IsRefreshDue(
+                    ownCount,
+                    _repository.GetLastCheckedUtc(internalId),
+                    config.RefreshAfterDays,
+                    internalId,
+                    DateTime.UtcNow);
+
+                if (SegmentRefreshPolicy.ShouldKeepExistingSegments(ownCount, refreshDue))
                 {
                     return;
                 }
 
-                _logger.Info("On-demand segment fetch triggered (playback_start) for {0} ({1})", item.Name, item.GetType().Name);
+                _logger.Debug("On-demand segment fetch triggered (playback_start) for {0} ({1})", item.Name, item.GetType().Name);
 
                 _ = TrackTaskAsync(Task.Run(async () =>
                 {
@@ -232,7 +246,7 @@ namespace TheIntroDB.EntryPoints
 
                         if (result.Segments == null || result.Segments.Count == 0)
                         {
-                            _logger.Info("On-demand segment fetch (playback_start): no segments returned for {0}", item.Name);
+                            _logger.Debug("On-demand segment fetch (playback_start): no segments returned for {0}", item.Name);
                             return;
                         }
 
@@ -246,7 +260,7 @@ namespace TheIntroDB.EntryPoints
 
                         _repository.ReplaceSegments(internalId, storedSegments, DateTime.UtcNow);
 
-                        _logger.Info("On-demand segment fetch completed (playback_start) for {0}: {1} segments", item.Name, storedSegments.Count);
+                        _logger.Debug("On-demand segment fetch completed (playback_start) for {0}: {1} segments", item.Name, storedSegments.Count);
                     }
                     catch (Exception ex)
                     {

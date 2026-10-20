@@ -20,22 +20,22 @@ namespace TheIntroDB.Api
         public long? EndMs { get; set; }
 
         /// <summary>
-        /// Returns whether this segment has usable start and end.
-        /// For intro/recap (endRequired=true) an end time after start is required.
-        /// For credits/preview (endRequired=false) at least one boundary must be present.
-        /// Missing boundaries default to 0 (start) or media duration (end).
+        /// Returns whether this segment has a usable time range.
+        /// For intro/recap, start is optional and end is required.
+        /// For credits/preview, start is required and end is optional.
+        /// An end at or before the start is never valid: the API sends 0/0 for a segment
+        /// confirmed absent, which would otherwise run from the start to the end of the media.
         /// </summary>
         /// <param name="endRequired">True if end time is required (intro/recap).</param>
         /// <returns>True if the segment has a valid range.</returns>
         public bool HasValidRange(bool endRequired)
         {
-            if (endRequired)
+            if (EndMs.HasValue)
             {
-                var startMs = StartMs ?? 0;
-                return EndMs.HasValue && EndMs.Value > startMs;
+                return EndMs.Value > (StartMs ?? 0);
             }
 
-            return StartMs.HasValue || EndMs.HasValue;
+            return !endRequired && StartMs.HasValue;
         }
     }
 }

@@ -72,9 +72,19 @@ namespace TheIntroDB.Configuration
 
         /// <summary>
         /// Gets or sets a value indicating whether to skip API requests for media that already has segments.
-        /// When enabled (default), items with existing segments are not refetched from TheIntroDB when the host exposes that state.
+        /// When enabled (default), items with existing segments are not refetched from TheIntroDB
+        /// until <see cref="RefreshAfterDays"/> passed (0 = never).
         /// </summary>
         public bool IgnoreMediaWithExistingSegments { get; set; }
+
+        /// <summary>
+        /// Gets or sets after how many days this plugin's own segments of an item are fetched again,
+        /// so corrected or newly accepted submissions arrive although
+        /// <see cref="IgnoreMediaWithExistingSegments"/> is on. The interval is spread per item
+        /// (75–125 %), so the items of one scan do not all fall due in the same later scan.
+        /// 0 never refreshes them.
+        /// </summary>
+        public int RefreshAfterDays { get; set; } = 30;
 
         /// <summary>
         /// Gets or sets a value indicating whether any existing intro marker protects the intro pair.

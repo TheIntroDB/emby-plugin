@@ -290,6 +290,40 @@ namespace TheIntroDB.Data
             }
         }
 
+        public DateTime? GetLastCheckedUtc(long itemInternalId)
+        {
+            EnterReadScope();
+            _lock.EnterReadLock();
+            try
+            {
+                var db = GetConnection();
+                if (db == null || !TableHasColumn(db, "MediaLookupHistory", "LastCheckedUtcTicks"))
+                {
+                    return null;
+                }
+
+                using (var stmt = db.PrepareStatement("SELECT LastCheckedUtcTicks FROM MediaLookupHistory WHERE ItemInternalId=@ItemInternalId"))
+                {
+                    BindInt64(stmt, "@ItemInternalId", itemInternalId);
+                    while (stmt.MoveNext())
+                    {
+                        var ticks = stmt.Current.GetInt64(0);
+                        if (ticks >= DateTime.MinValue.Ticks && ticks <= DateTime.MaxValue.Ticks)
+                        {
+                            return new DateTime(ticks, DateTimeKind.Utc);
+                        }
+                    }
+                }
+
+                return null;
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+                ExitReadScope();
+            }
+        }
+
         public void ReplaceSegments(long itemInternalId, IReadOnlyList<StoredMediaSegment> segments, DateTime updatedUtc)
         {
             EnsureWritable();

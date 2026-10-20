@@ -87,8 +87,11 @@ namespace TheIntroDB.Services
 
             // Pre-filter: when IgnoreMediaWithExistingSegments is enabled,
             // fetch all item IDs that already have segments in ONE batch query
-            // and exclude them from the scan. This avoids thousands of
-            // individual HasAnySegments/GetSegments calls inside the loop.
+            // and exclude them from the scan, except the ones whose own segments
+            // are due for a refresh (RefreshAfterDays) — otherwise a corrected
+            // submission would never reach a library that fetched the old one.
+            // This avoids thousands of individual HasAnySegments/GetSegments
+            // calls inside the loop.
             BaseItem[] itemsToScan;
             int cachedSegmentCount = 0;
 
@@ -96,15 +99,20 @@ namespace TheIntroDB.Services
             {
                 var knownIds = _repository.GetSegmentedIds();
                 var knownSet = new HashSet<long>(knownIds);
+                var refreshDue = SegmentRefreshPolicy.DueIds(
+                    knownIds,
+                    _repository.GetLastCheckedUtc(),
+                    config.RefreshAfterDays,
+                    DateTime.UtcNow);
 
                 itemsToScan = items
-                    .Where(i => !knownSet.Contains(i.InternalId))
+                    .Where(i => !knownSet.Contains(i.InternalId) || refreshDue.Contains(i.InternalId))
                     .ToArray();
 
-                cachedSegmentCount = knownIds.Count;
+                cachedSegmentCount = knownIds.Count - refreshDue.Count;
 
-                _logger.Info("TheIntroDB scan: {0} total items, {1} already have segments (cached), {2} items to scan",
-                    items.Length, cachedSegmentCount, itemsToScan.Length);
+                _logger.Info("TheIntroDB scan: {0} total items, {1} already have segments (cached), {2} due for a refresh after {3} days, {4} items to scan",
+                    items.Length, cachedSegmentCount, refreshDue.Count, config.RefreshAfterDays, itemsToScan.Length);
             }
             else
             {

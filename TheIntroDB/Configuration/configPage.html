@@ -127,7 +127,13 @@
                         <input id="IgnoreMediaWithExistingSegments" name="IgnoreMediaWithExistingSegments" type="checkbox" is="emby-checkbox" />
                         <span>Ignore media that already has segments</span>
                     </label>
-                    <div class="fieldDescription">When enabled, items that already have segments are skipped to avoid refetching.</div>
+                    <div class="fieldDescription">When enabled, items that already have segments are skipped to avoid refetching, until their own segments are due for a refresh.</div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="RefreshAfterDays">Refresh TheIntroDB segments after (days)</label>
+                    <input id="RefreshAfterDays" name="RefreshAfterDays" type="number" min="0" step="1" is="emby-input" autocomplete="off" />
+                    <div class="fieldDescription">Items with segments from TheIntroDB are fetched again after this many days, so corrected submissions arrive. Default 30. 0 never refreshes.</div>
                 </div>
 
                 <div class="checkboxContainer checkboxContainer-withDescription">
@@ -135,7 +141,7 @@
                         <input id="EnableOnDemandFetch" name="EnableOnDemandFetch" type="checkbox" is="emby-checkbox" />
                         <span>Automatically fetch segments on item addition</span>
                     </label>
-                    <div class="fieldDescription">When enabled, segments will be fetched for newly added items, so long as no segments exist yet.</div>
+                    <div class="fieldDescription">When enabled, segments are fetched for newly added items — after their metadata download, and on playback start. Existing segments are kept or refreshed as configured above.</div>
                 </div>
 
                 <div class="inputContainer">

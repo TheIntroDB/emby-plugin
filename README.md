@@ -49,7 +49,8 @@ TheIntroDB plugin includes some configuration options to adjust and improve your
 
 - **API Key**: You can enter your TheIntroDB API key to fetch your submissions even if they're still pending and prioritize yours in the averaging calculation. It also moves requests to the signed-in rate limits (120 requests per 10 s, 100,000 lookups per day instead of 30 and 5,000), which is what lets a full library scan finish in one run.
 - **Segment Toggles**: (Intro, Recap, Credits, and Preview — all enabled by default) You can disable each segment individually so they're not applied when fetching.
-- **Ignore Media That Already Has Segments**: (Enabled by default) Prevent refetching of media that already has segments. This is recommended for large libraries.
+- **Ignore Media That Already Has Segments**: (Enabled by default) Prevent refetching of media that already has segments, until they are due for a refresh (see below). This is recommended for large libraries.
+- **Refresh TheIntroDB Segments After (Days)**: (30 by default) Items with segments from TheIntroDB are fetched again after this many days, so corrected or newly accepted submissions arrive. The interval is spread per item (75–125 %), so the items of one scan do not all fall due together. 0 never refreshes.
 
 ## How Segments Appear in Emby
 
