@@ -38,6 +38,29 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
+        public void CachedSkipsDoNotSpendTheLookupBudget()
+        {
+            // The scanner reserves a lookup before calling the provider and cancels it when
+            // the result reports no API attempt — the not-found cache hit, and an address
+            // already refused as out of range in this session. So a cached skip must come
+            // back as NotAttempted: a cached hit that claimed WasApiAttempted would spend
+            // MaxLookupsPerRun on the same items every run and never reach the rest of the
+            // library (a review finding on this PR). Only a real HTTP 400 may return
+            // Unsupported, which is deliberately attempted.
+            Assert.False(SegmentFetchResult.NotAttempted().WasApiAttempted);
+            Assert.True(SegmentFetchResult.Unsupported().WasApiAttempted);
+
+            var budget = new ScanLookupBudget(2);
+            Assert.True(budget.TryBeginLookup());
+            budget.CancelLatestLookup();
+            Assert.Equal(0, budget.Used);
+
+            Assert.True(budget.TryBeginLookup());
+            Assert.True(budget.TryBeginLookup());
+            Assert.False(budget.TryBeginLookup());
+        }
+
+        [Fact]
         public void RateLimitRetryCountsAgainstBudget()
         {
             var budget = new ScanLookupBudget(2);
@@ -182,6 +205,7 @@ namespace TheIntroDB.Tests
             yield return new object[] { SegmentFetchResult.Error() };
             yield return new object[] { SegmentFetchResult.RateLimited() };
             yield return new object[] { SegmentFetchResult.ClientError() };
+            yield return new object[] { SegmentFetchResult.Unsupported() };
         }
 
         [Fact]
@@ -215,6 +239,53 @@ namespace TheIntroDB.Tests
             Assert.False(CountsTowardLimit(SegmentFetchResult.Success(System.Array.Empty<MediaSegmentData>())));
             Assert.False(CountsTowardLimit(SegmentFetchResult.RateLimited()));
             Assert.False(CountsTowardLimit(SegmentFetchResult.NotAttempted()));
+            Assert.False(CountsTowardLimit(SegmentFetchResult.Unsupported()));
+        }
+
+        [Fact]
+        public void UnsupportedCoordinatesNeitherCompleteTheLookupNorLookLikeAFailure()
+        {
+            // jellyfin-plugin#39: an out-of-range season (a year-based season number) is
+            // final for the API version, so the scan must skip the item without counting
+            // it toward the abort limit, without treating it as a completed 404 (which
+            // would make the scan write an empty segment list over what is stored), and
+            // without classifying it as an error.
+            var result = SegmentFetchResult.Unsupported();
+            Assert.True(result.IsUnsupported);
+            Assert.True(result.WasApiAttempted);
+            Assert.False(result.IsLookupCompleted);
+            Assert.False(result.IsError);
+            Assert.False(result.IsClientError);
+            Assert.False(result.IsServerError);
+            Assert.False(result.IsRateLimited);
+            Assert.Empty(result.Segments);
+        }
+
+        [Fact]
+        public void UnsupportedApiResultIsNotAnErrorOrANotFound()
+        {
+            var result = TheIntroDB.Api.MediaFetchResult.Unsupported();
+            Assert.True(result.IsUnsupported);
+            Assert.False(result.IsError);
+            Assert.False(result.IsNotFound);
+            Assert.False(result.IsClientError);
+            Assert.False(result.IsServerError);
+        }
+
+        [Theory]
+        [InlineData(400, "{\"error\":\"Invalid season. Must be between 0 and 1000\"}", true)]   // jellyfin-plugin#39: S2024
+        [InlineData(400, "{\"error\":\"Invalid episode. Must be between 0 and 10000\"}", true)]
+        [InlineData(400, "{\"error\":\"invalid season. must be between 0 and 1000\"}", true)]
+        [InlineData(400, "{\"error\":\"Invalid season format: abc\"}", false)]                  // a client bug, not a range
+        [InlineData(400, "{\"error\":\"Invalid tvdb_id format\"}", false)]
+        [InlineData(400, "{\"error\":\"no submissions for this media\"}", false)]
+        [InlineData(404, "{\"error\":\"no submissions for this media\"}", false)]
+        [InlineData(500, "{\"error\":\"internal\"}", false)]
+        [InlineData(400, "", false)]
+        [InlineData(400, "   ", false)]
+        public void OnlyTheSeasonOrEpisodeRangeIsClassifiedAsUnsupportedCoordinates(int statusCode, string body, bool expected)
+        {
+            Assert.Equal(expected, TheIntroDB.Api.TheIntroDbClient.IsUnsupportedCoordinateRejection(statusCode, body));
         }
 
         private static bool CountsTowardLimit(SegmentFetchResult result)

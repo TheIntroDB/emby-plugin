@@ -221,6 +221,17 @@ namespace TheIntroDB.Services
                         continue;
                     }
 
+                    if (result.IsUnsupported)
+                    {
+                        // The API refused this item's season/episode range (a year-based
+                        // season number, jellyfin-plugin#39). The provider warned once
+                        // for the series, and the answer is final for this API version,
+                        // so there is nothing to write, nothing to retry and nothing to
+                        // count as a failure: the item's stored segments stay as they are.
+                        processed++;
+                        continue;
+                    }
+
                     if (!result.IsLookupCompleted)
                     {
                         if (ShouldCountTowardFailureLimit(result))
@@ -363,7 +374,8 @@ namespace TheIntroDB.Services
         /// counter that aborts the scan. Only genuine "API may be down" signals count
         /// (transport failures after retries — <see cref="SegmentFetchResult.Error"/>).
         /// Server (5xx) and client (4xx) responses prove the API is reachable and
-        /// answering, so they never abort the scan.
+        /// answering, so they never abort the scan — and neither does an out-of-range
+        /// season/episode answer, which is a property of the item's coordinates.
         /// </summary>
         private static bool ShouldCountTowardFailureLimit(SegmentFetchResult result)
         {
@@ -371,7 +383,8 @@ namespace TheIntroDB.Services
                 && !result.IsLookupCompleted
                 && !result.IsServerError
                 && !result.IsClientError
-                && !result.IsRateLimited;
+                && !result.IsRateLimited
+                && !result.IsUnsupported;
         }
 
         private static BaseItem[] OrderItemsForScan(
