@@ -43,6 +43,8 @@ The series' **display order** is sent with every episode lookup, so a show set t
 
 IMDb and TMDB ids are less accurate for TV episodes: those requests are always read in that provider's numbering.
 
+**Year-based season numbers are not supported by the API yet.** Some series (e.g. *Tagesschau*) number their seasons by year, so Emby passes a season such as `2024` to the API, which accepts a season of at most `1000`. The plugin cannot express that request in any other way, so such episodes are skipped: one warning per series instead of one per episode, the plugin stops re-asking for those episodes until Emby restarts, and segments already stored are left alone. They will start working once the API accepts those season numbers.
+
 ## Configuration
 
 TheIntroDB plugin includes some configuration options to adjust and improve your experience.

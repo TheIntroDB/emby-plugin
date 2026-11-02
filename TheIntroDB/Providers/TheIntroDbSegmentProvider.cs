@@ -30,6 +30,18 @@ namespace TheIntroDB.Providers
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, byte> _orderSkipsLogged =
             new System.Collections.Concurrent.ConcurrentDictionary<Guid, byte>();
 
+        // One warning per series whose season/episode numbers the API refuses, not one
+        // per episode of it (jellyfin-plugin#39). Static for the same reason as above.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, byte> _coordinateSkipsLogged =
+            new System.Collections.Concurrent.ConcurrentDictionary<Guid, byte>();
+
+        // Addresses the API has refused as out of range during this session. A 400
+        // spends rate-limit budget like any other request, so a year-based season must
+        // not be re-asked once per item per scan; the session boundary keeps a fixed API
+        // from being skipped forever once it starts accepting those numbers.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _unsupportedCoordinates =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, byte>();
+
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
 
@@ -190,6 +202,17 @@ namespace TheIntroDB.Providers
               config.EnableIntro, config.EnableRecap, config.EnableCredits, config.EnablePreview, config.IgnoreMediaWithExistingSegments);
 
             var lookupKey = BuildNotFoundKey(isMovie, tmdbId, tvdbId, imdbId, season, episode, mapping, tvdbEpisodeId);
+
+            if (_unsupportedCoordinates.ContainsKey(lookupKey))
+            {
+                // This address was already refused as out of range in this session
+                // (jellyfin-plugin#39: a year-based season number the API caps).
+                // Re-asking would spend rate-limit budget on a known 400 for every item
+                // of every scan, so skip the request and leave the stored segments alone.
+                _logger.Debug("Skipping {0}: TheIntroDB rejected its season/episode range in this session", item.Name);
+                return SegmentFetchResult.Unsupported();
+            }
+
             if (TheIntroDbNotFoundCache.Instance.TryGetHit(lookupKey))
             {
                 _logger.Debug("Skipping {0}: known not found in TheIntroDB (cached 404)", item.Name);
@@ -227,6 +250,24 @@ namespace TheIntroDB.Providers
             {
                 _logger.Warn("TheIntroDB API server error for {0}", item.Name);
                 return SegmentFetchResult.ServerError();
+            }
+
+            if (mediaResult.IsUnsupported)
+            {
+                // The API refused the item's season/episode numbers as out of range
+                // (jellyfin-plugin#39: Emby passes a year-based season number such as
+                // 2024 straight through, and the API caps a season at 1000). Those
+                // coordinates cannot be expressed on this API version, so the outcome is
+                // final for the item: say it once per series, stop asking for the rest of
+                // the session, and return without touching anything the item already has.
+                var coordinatesSeries = (item as Episode)?.Series;
+                LogCoordinatesSkipOnce(
+                  coordinatesSeries == null ? itemId : coordinatesSeries.Id,
+                  coordinatesSeries == null ? item.Name : coordinatesSeries.Name,
+                  season,
+                  episode);
+                _unsupportedCoordinates[lookupKey] = 0;
+                return SegmentFetchResult.Unsupported();
             }
 
             if (mediaResult.IsClientError)
@@ -422,6 +463,26 @@ namespace TheIntroDB.Providers
                 _logger.Warn(
                   "Skipping {0}: the series uses a non-default display order, but Emby carries no TVDB id to express it against. Add TVDB metadata to the series so the API can convert the episode numbers.",
                   name);
+            }
+        }
+
+        /// <summary>
+        /// Logs a series whose season/episode numbers the API refuses, once per series
+        /// rather than once per episode (jellyfin-plugin#39).
+        /// </summary>
+        /// <param name="itemId">Emby id of the series being skipped (the episode's id when there is no series).</param>
+        /// <param name="name">Series name, for the log line.</param>
+        /// <param name="season">The season number the API refused.</param>
+        /// <param name="episode">The episode number the API refused.</param>
+        private void LogCoordinatesSkipOnce(Guid itemId, string name, int? season, int? episode)
+        {
+            if (_coordinateSkipsLogged.TryAdd(itemId, 0))
+            {
+                _logger.Warn(
+                  "Skipping {0}: TheIntroDB rejected S{1}E{2} as out of range. API v4 accepts a season of at most 1000 and an episode of at most 10000, so year-based season numbers (e.g. S2024) cannot be requested yet. Existing segments are kept.",
+                  name,
+                  season,
+                  episode);
             }
         }
 

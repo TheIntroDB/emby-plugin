@@ -177,10 +177,39 @@ namespace TheIntroDB.Api
 
                             if (!response.IsSuccessStatusCode)
                             {
-                                var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                                var rawBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                                var body = rawBody;
                                 if (!string.IsNullOrEmpty(body) && body.Length > 500)
                                 {
                                     body = body.Substring(0, 500) + "...";
+                                }
+
+                                if (IsUnsupportedCoordinateRejection((int)response.StatusCode, rawBody))
+                                {
+                                    // The season/episode numbers themselves are outside the range
+                                    // /media accepts (jellyfin-plugin#39: Emby hands a year-based
+                                    // season number such as 2024 straight through, and the API caps
+                                    // a season at 1000). Nothing about the caller's key or identity
+                                    // is wrong and no retry can express those coordinates, so this
+                                    // is final — and logged at debug, because the provider says it
+                                    // once per series instead of once per episode per scan.
+                                    _logger.Debug(
+                                        "TheIntroDB API rejected the season/episode coordinates as out of range: {0}",
+                                        string.IsNullOrEmpty(body) ? "(empty)" : body);
+                                    TrackUsage(trackUsage,
+                                        "theintrodb_api_media_fetch",
+                                        new Dictionary<string, object>
+                                        {
+                                            ["host"] = "emby",
+                                            ["result"] = "unsupported_coordinates",
+                                            ["status"] = (int)response.StatusCode,
+                                            ["media_type"] = isMovie ? "movie" : "episode",
+                                            ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                            ["has_tvdb"] = hasTvdb ? 1 : 0,
+                                            ["has_imdb"] = hasImdb ? 1 : 0,
+                                            ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                                        });
+                                    return MediaFetchResult.Unsupported();
                                 }
 
                                 _logger.Warn("TheIntroDB API error response body: {0}", string.IsNullOrEmpty(body) ? "(empty)" : body);
@@ -328,6 +357,30 @@ namespace TheIntroDB.Api
             }
 
             return MediaFetchResult.Error();
+        }
+
+        /// <summary>
+        /// Classifies a non-success GET /media response as the API refusing the
+        /// season/episode numbers themselves rather than the request as a whole.
+        /// </summary>
+        /// <remarks>
+        /// Emby numbers a year-based season series by year (Tagesschau S2024E196), and
+        /// the API caps a season at 1000. Only the range message counts — a malformed
+        /// season ("Invalid season format") is a client bug and stays a loud error.
+        /// Matching the message prefix keeps it correct if the API moves the bounds.
+        /// </remarks>
+        /// <param name="statusCode">The response status code.</param>
+        /// <param name="body">The response body, when one was read.</param>
+        /// <returns>True when the API rejected the season/episode range.</returns>
+        internal static bool IsUnsupportedCoordinateRejection(int statusCode, string body)
+        {
+            if (statusCode != 400 || string.IsNullOrWhiteSpace(body))
+            {
+                return false;
+            }
+
+            return body.IndexOf("Invalid season. Must be between", StringComparison.OrdinalIgnoreCase) >= 0
+                || body.IndexOf("Invalid episode. Must be between", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>
