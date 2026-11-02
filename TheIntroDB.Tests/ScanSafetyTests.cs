@@ -38,6 +38,29 @@ namespace TheIntroDB.Tests
         }
 
         [Fact]
+        public void CachedSkipsDoNotSpendTheLookupBudget()
+        {
+            // The scanner reserves a lookup before calling the provider and cancels it when
+            // the result reports no API attempt — the not-found cache hit, and an address
+            // already refused as out of range in this session. So a cached skip must come
+            // back as NotAttempted: a cached hit that claimed WasApiAttempted would spend
+            // MaxLookupsPerRun on the same items every run and never reach the rest of the
+            // library (a review finding on this PR). Only a real HTTP 400 may return
+            // Unsupported, which is deliberately attempted.
+            Assert.False(SegmentFetchResult.NotAttempted().WasApiAttempted);
+            Assert.True(SegmentFetchResult.Unsupported().WasApiAttempted);
+
+            var budget = new ScanLookupBudget(2);
+            Assert.True(budget.TryBeginLookup());
+            budget.CancelLatestLookup();
+            Assert.Equal(0, budget.Used);
+
+            Assert.True(budget.TryBeginLookup());
+            Assert.True(budget.TryBeginLookup());
+            Assert.False(budget.TryBeginLookup());
+        }
+
+        [Fact]
         public void RateLimitRetryCountsAgainstBudget()
         {
             var budget = new ScanLookupBudget(2);

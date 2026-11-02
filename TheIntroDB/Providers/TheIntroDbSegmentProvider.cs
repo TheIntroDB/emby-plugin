@@ -209,8 +209,14 @@ namespace TheIntroDB.Providers
                 // (jellyfin-plugin#39: a year-based season number the API caps).
                 // Re-asking would spend rate-limit budget on a known 400 for every item
                 // of every scan, so skip the request and leave the stored segments alone.
+                //
+                // NotAttempted, not Unsupported: no request went out, so the scan must
+                // cancel the lookup it reserved (the scanner refunds exactly when
+                // WasApiAttempted is false, like the not-found cache hit below). Claiming
+                // an attempt here would spend MaxLookupsPerRun on the same cached items
+                // every run and never reach the rest of the library.
                 _logger.Debug("Skipping {0}: TheIntroDB rejected its season/episode range in this session", item.Name);
-                return SegmentFetchResult.Unsupported();
+                return SegmentFetchResult.NotAttempted();
             }
 
             if (TheIntroDbNotFoundCache.Instance.TryGetHit(lookupKey))
@@ -479,7 +485,7 @@ namespace TheIntroDB.Providers
             if (_coordinateSkipsLogged.TryAdd(itemId, 0))
             {
                 _logger.Warn(
-                  "Skipping {0}: TheIntroDB rejected S{1}E{2} as out of range. API v4 accepts a season of at most 1000 and an episode of at most 10000, so year-based season numbers (e.g. S2024) cannot be requested yet. Existing segments are kept.",
+                  "Skipping {0}: TheIntroDB rejected S{1}E{2} as out of range. An API that caps a season at 1000 refuses year-based season numbers (e.g. S2024); existing segments are kept.",
                   name,
                   season,
                   episode);
