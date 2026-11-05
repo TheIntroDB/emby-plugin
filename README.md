@@ -1,8 +1,16 @@
-# TheIntroDB – Emby Plugin
+<img align="right" width="88" src="https://raw.githubusercontent.com/TheIntroDB/theintrodb-assets/main/integrations/emby.png" alt="Emby">
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/TheIntroDB/theintrodb-assets/main/logo-banner.png">
-</p>
+[![Emby 4.7%2B](https://img.shields.io/badge/Emby-4.7%2B-52B54B?style=flat-square&logo=emby&logoColor=4ade80&labelColor=0d0d0d)](https://emby.media)
+[![License](https://img.shields.io/github/license/TheIntroDB/emby-plugin?style=flat-square&logo=gnu&logoColor=4ade80&label=License&labelColor=0d0d0d&color=038939)](https://github.com/TheIntroDB/emby-plugin/blob/main/LICENSE)
+
+[![Stars](https://img.shields.io/github/stars/TheIntroDB/emby-plugin?style=flat-square&logo=github&logoColor=4ade80&label=Stars&labelColor=0d0d0d&color=038939)](https://github.com/TheIntroDB/emby-plugin/stargazers)
+[![Issues](https://img.shields.io/github/issues/TheIntroDB/emby-plugin?style=flat-square&logo=github&logoColor=4ade80&label=Issues&labelColor=0d0d0d&color=038939)](https://github.com/TheIntroDB/emby-plugin/issues)
+[![Last commit](https://img.shields.io/github/last-commit/TheIntroDB/emby-plugin?style=flat-square&logo=git&logoColor=4ade80&label=Last%20commit&labelColor=0d0d0d&color=038939)](https://github.com/TheIntroDB/emby-plugin/commits)
+[![Discord](https://img.shields.io/discord/1457550295742812307?style=flat-square&logo=discord&logoColor=4ade80&label=Discord&labelColor=0d0d0d&color=038939)](https://discord.com/channels/1457550295742812307/1457550298255200380)
+
+### TheIntroDB – Emby Plugin
+
+---
 
 This plugin fetches intro, recap, credits, and preview timestamps from [TheIntroDB](https://theintrodb.org) for your Emby library. It uses this data to enable intro skipping features in compatible Emby clients.
 
@@ -113,3 +121,12 @@ dotnet build
 1. Build: `dotnet build`
 2. Copy the DLL: `cp TheIntroDB/bin/Debug/netstandard2.0/TheIntroDB.dll /var/lib/emby/plugins/` (adjust path for your OS)
 3. Restart Emby Server.
+
+---
+
+<p align="center">
+  <a href="https://theintrodb.org"><img src="https://raw.githubusercontent.com/TheIntroDB/theintrodb-assets/main/badge.png" alt="TheIntroDB" width="44" height="44"></a>
+  <br><br>
+  <sub><b>TheIntroDB</b> · community-submitted intro, recap, credits and preview timestamps for your media server<br>
+  <a href="https://theintrodb.org">theintrodb.org</a> · <a href="https://github.com/TheIntroDB">GitHub</a> · <a href="https://discord.com/channels/1457550295742812307/1457550298255200380">Discord</a></sub>
+</p>
