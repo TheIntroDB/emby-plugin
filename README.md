@@ -1,4 +1,4 @@
-<img align="right" width="88" src="https://raw.githubusercontent.com/TheIntroDB/theintrodb-assets/main/integrations/emby.png" alt="Emby">
+<img align="right" width="88" src="https://raw.githubusercontent.com/TheIntroDB/.github/main/integrations/emby.png" alt="Emby">
 
 [![Emby 4.7%2B](https://img.shields.io/badge/Emby-4.7%2B-52B54B?style=flat-square&logo=emby&logoColor=4ade80&labelColor=0d0d0d)](https://emby.media)
 [![License](https://img.shields.io/github/license/TheIntroDB/emby-plugin?style=flat-square&logo=gnu&logoColor=4ade80&label=License&labelColor=0d0d0d&color=038939)](https://github.com/TheIntroDB/emby-plugin/blob/main/LICENSE)
