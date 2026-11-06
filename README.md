@@ -2,6 +2,7 @@
 
 [![Emby 4.7%2B](https://img.shields.io/badge/Emby-4.7%2B-52B54B?style=flat-square&logo=emby&logoColor=4ade80&labelColor=0d0d0d)](https://emby.media)
 [![License](https://img.shields.io/github/license/TheIntroDB/emby-plugin?style=flat-square&logo=gnu&logoColor=4ade80&label=License&labelColor=0d0d0d&color=038939)](https://github.com/TheIntroDB/emby-plugin/blob/main/LICENSE)
+[![Listed on JellyWatch Hub](https://jellywatch.app/hub/theintrodb/badge.svg)](https://jellywatch.app/hub/theintrodb)
 
 [![Stars](https://img.shields.io/github/stars/TheIntroDB/emby-plugin?style=flat-square&logo=github&logoColor=4ade80&label=Stars&labelColor=0d0d0d&color=038939)](https://github.com/TheIntroDB/emby-plugin/stargazers)
 [![Issues](https://img.shields.io/github/issues/TheIntroDB/emby-plugin?style=flat-square&logo=github&logoColor=4ade80&label=Issues&labelColor=0d0d0d&color=038939)](https://github.com/TheIntroDB/emby-plugin/issues)
