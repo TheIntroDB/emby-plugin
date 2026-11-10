@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 TheIntroDB
+
 define(["emby-input", "emby-button", "emby-checkbox"], function () {
     return function (view) {
     var pluginUniqueId = "424b8e01-03d2-40a1-ba58-a2b9306f115d";
