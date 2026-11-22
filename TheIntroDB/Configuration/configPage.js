@@ -1,8 +1,264 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 TheIntroDB
 
-define(["emby-input", "emby-button", "emby-checkbox"], function () {
+define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_input, _button, _checkbox, globalize) {
+    const strings = {
+        en: {
+            "connection": "Connection",
+            "apiKey": "API key (optional)",
+            "apiKeyHelp": "Optional Bearer token; when set, your pending and accepted submissions are weighted higher in results, and requests use the signed-in rate limits (120 requests per 10 seconds, 100,000 lookups per day instead of 30 and 5,000). A key is what lets a large library scan finish in one run.",
+            "scanScope": "Scan scope",
+            "scanScopeLabel": "Only scan selected shows or libraries (optional)",
+            "allMedia": "All media",
+            "browse": "Browse libraries and shows",
+            "clearSelection": "Clear selection",
+            "scanScopeHelp": "Whitelisting a library scans all movies and episodes inside it. Selecting individual movies or shows only scans those specific items. Any media outside the selected libraries or items is left unchanged.",
+            "missingCache": "Not-found cache",
+            "clearMissing": "Clear not-found cache",
+            "missingHelp": "Items TheIntroDB has no data for are skipped for 14 days to save API requests. If you just submitted segments on theintrodb.org, clear the cache and run the Media segment scan to pull them into your library.",
+            "segments": "Segments",
+            "intro": "Provide intro segments",
+            "introHelp": "Include intro segments from TheIntroDB in Emby media processing.",
+            "recap": "Provide recap segments",
+            "recapHelp": "Include recap segments from TheIntroDB.",
+            "credits": "Provide credits (outro) segments",
+            "creditsHelp": "Include credits/outro segments from TheIntroDB.",
+            "preview": "Provide preview segments",
+            "previewHelp": "Include preview segments from TheIntroDB.",
+            "createChapters": "Create chapter entries for segments",
+            "createChaptersHelp": "When enabled, readable chapter entries are created alongside native markers (IntroStart, CreditsStart). Recaps and Previews have no native marker support in Emby and will be invisible without chapters. Disable this to hide the identification string from chapter names.",
+            "markerProtection": "Marker protection",
+            "protectIntro": "Protect existing intro markers",
+            "protectIntroHelp": "Recommended. Any existing complete or partial native intro marker prevents TheIntroDB from changing that intro pair.",
+            "protectCredits": "Protect existing credits markers",
+            "protectCreditsHelp": "Recommended. An existing native credits marker remains authoritative.",
+            "replaceOwned": "Replace existing TheIntroDB-owned markers",
+            "replaceOwnedHelp": "Off by default. Only chapters carrying a matching durable TheIntroDB ownership token are removed before updated markers are applied. Native, manual, legacy and third-party chapters remain unchanged.",
+            "scanBehavior": "Scanning behavior",
+            "ignoreExisting": "Ignore media that already has segments",
+            "ignoreExistingHelp": "When enabled, items that already have segments are skipped to avoid refetching, until their own segments are due for a refresh.",
+            "refreshAfterDays": "Refresh TheIntroDB segments after (days)",
+            "refreshAfterDaysHelp": "Items with segments from TheIntroDB are fetched again after this many days, so corrected submissions arrive. Default 30. 0 never refreshes.",
+            "fetchOnAdd": "Automatically fetch segments on item addition",
+            "fetchOnAddHelp": "When enabled, segments are fetched for newly added items — after their metadata download, and on playback start. Existing segments are kept or refreshed as configured above.",
+            "maxLookups": "Maximum API lookups per run",
+            "maxLookupsHelp": "Bounds large scans: how many API lookups a single run may perform. Default 400. Zero disables API lookups for the task. Large libraries may need more; re-running the scan continues where it left off.",
+            "privacy": "Privacy & logging",
+            "usageReporting": "Enable anonymous usage reporting",
+            "usageReportingHelp": "When enabled, anonymous usage metrics may be collected to help improve the plugin.",
+            "fileLogging": "Enable file logging",
+            "fileLoggingHelp": "When enabled, plugin logs are written to a separate file (data/theintrodb/theintrodb.log) instead of the main Emby log.",
+            "maintenance": "Maintenance",
+            "repairHours": "Marker repair interval (hours)",
+            "repairHoursHelp": "How often the plugin checks items it has segments for and restores TheIntroDB markers that Emby may have overwritten (e.g. when Emby regenerates placeholder chapters for files without embedded chapters). Set to 0 to disable automatic repair.",
+            "repairTip": "Tip: Emby's library setting \"Generate chapters for videos that don't contain embedded chapter information\" (Dashboard → Libraries → edit a library) can overwrite TheIntroDB markers on files without embedded chapters. Disabling it there prevents the overwrite entirely.",
+            "debug": "Debug",
+            "internalId": "Item InternalId",
+            "internalIdHelp": "Loads stored segments for a specific item from the local DB.",
+            "loadSegments": "Load Segments",
+            "save": "Save",
+            "back": "Back",
+            "chooseLibraries": "Choose Libraries",
+            "cancel": "Cancel",
+            "done": "Done",
+            "includeFolder": "Whitelist whole folder",
+            "chooseLibraryHelp": "Open a library to browse its movies and shows. Inside a library, you can whitelist the whole folder or pick individual movies and shows.",
+            "searchLibraries": "Search libraries",
+            "loadingLibraries": "Loading libraries...",
+            "apiStats": "API Key Stats",
+            "close": "Close",
+            "overviewBefore": "Segment data (intro, recap, credits, preview) is fetched from",
+            "overviewAfter": "(v4) using each item's TVDB, TMDB or IMDB ID. TVDB is preferred: it is the API's identity, and it is what lets series with a non-default display order (DVD, absolute) resolve to the right episode. Segments are not loaded when you press play; run the TheIntroDB media segment scan scheduled task to populate them.",
+            "unknownItem": "Unknown item",
+            "library": "Library",
+            "previousLibrary": "Previously selected library",
+            "previousItem": "Previously selected item",
+            "apiStatsButton": "Show API key stats",
+            "noStats": "No stats available.",
+            "apiVerified": "API key verified.",
+            "invalidToken": "Invalid or expired token.",
+            "checkingKey": "Checking API key...",
+            "validationUnavailable": "Could not validate API key right now.",
+            "excludeFolder": "Remove whole folder",
+            "searchThisLibrary": "Search this library",
+            "browseLibraryHelp": "Movies and series can be selected individually, or you can whitelist the whole folder to include everything inside it.",
+            "browseLibrary": "Choose a library to browse its contents.",
+            "noSupportedLibraries": "No supported libraries were returned for this user.",
+            "thisLibrary": "this library",
+            "noItems": "No items found.",
+            "noLibraries": "No libraries found.",
+            "folderIncluded": "Folder whitelisted",
+            "openFolder": "Open folder",
+            "selectedShow": "Selected show",
+            "selectedMovie": "Selected movie",
+            "selectItem": "Click to select",
+            "loadingContents": "Loading library contents...",
+            "contentsFailed": "Could not load library contents right now.",
+            "librariesFailed": "Could not load libraries right now.",
+            "clearing": "Clearing...",
+            "clearFailed": "Failed to clear the not-found cache.",
+            "invalidInternalId": "Enter a valid InternalId.",
+            "segmentsFailed": "Failed to load segments.",
+            "librariesSummary": "Libraries: {names}",
+            "manyLibraries": "{count} libraries selected: {names}, ...",
+            "manyItems": "{count} items selected: {names}, ...",
+            "showingContents": "Showing movies and series from {library}.",
+            "emptyContents": "No movies or series were returned from {library}.",
+            "clearedEntries": "Cleared {count} cached not-found item(s). Run the Media segment scan to re-check your library.",
+            "stat_total": "Total",
+            "stat_accepted": "Accepted",
+            "stat_pending": "Pending",
+            "stat_rejected": "Rejected",
+            "stat_acceptance_rate": "Acceptance Rate",
+            "stat_current_streak": "Current Streak",
+            "stat_best_streak": "Best Streak",
+            "stat_total_time_saved_ms": "Total Time Saved Ms",
+            "hours": "{value}h",
+            "minutes": "{value}m",
+            "seconds": "{value}s"
+        },
+        "zh-CN": {
+            "connection": "连接",
+            "apiKey": "API 密钥（可选）",
+            "apiKeyHelp": "填写 API 密钥后，你提交的待审核和已通过标记在匹配结果中权重更高，限额也从每 10 秒 30 次、每天 5,000 次提升到每 10 秒 120 次、每天 100,000 次，有助于一次扫完大型媒体库。",
+            "scanScope": "扫描范围",
+            "scanScopeLabel": "仅扫描选定的影片、剧集或媒体库（可选）",
+            "allMedia": "全部媒体",
+            "browse": "浏览媒体库和影片",
+            "clearSelection": "清空选择",
+            "scanScopeHelp": "选中整个媒体库会扫描其中所有电影和剧集。也可以单独选择某部电影或剧集，范围之外的媒体不受影响。",
+            "missingCache": "未命中缓存",
+            "clearMissing": "清除未命中缓存",
+            "missingHelp": "TheIntroDB 暂无数据的项目会跳过 14 天，以节省 API 请求。刚在 theintrodb.org 提交标记的话，可以清除缓存并运行「TheIntroDB Media Segment Scan」任务重新查询。",
+            "segments": "片段类型",
+            "intro": "获取片头片段",
+            "introHelp": "将 TheIntroDB 的片头片段用于 Emby 媒体处理。",
+            "recap": "获取前情回顾片段",
+            "recapHelp": "从 TheIntroDB 获取前情回顾片段。",
+            "credits": "获取片尾片段",
+            "creditsHelp": "从 TheIntroDB 获取片尾片段。",
+            "preview": "获取下集预告片段",
+            "previewHelp": "从 TheIntroDB 获取下集预告片段。",
+            "createChapters": "为片段创建章节条目",
+            "createChaptersHelp": "除 Emby 原生的片头和片尾标记外，同时生成带名称的章节。Emby 没有原生的前情回顾和预告标记，这两类片段关闭本项后不会出现在章节列表中。",
+            "markerProtection": "标记保护",
+            "protectIntro": "保护现有片头标记",
+            "protectIntroHelp": "建议开启。只要已有完整或部分原生片头标记，TheIntroDB 就不会修改这组标记。",
+            "protectCredits": "保护现有片尾标记",
+            "protectCreditsHelp": "建议开启。已有原生片尾标记时以它为准。",
+            "replaceOwned": "更新 TheIntroDB 自己写入的标记",
+            "replaceOwnedHelp": "默认关闭。更新时只替换能确认由 TheIntroDB 写入的章节，不动原生、手动、旧版或第三方章节。",
+            "scanBehavior": "扫描行为",
+            "ignoreExisting": "跳过已有片段的媒体",
+            "ignoreExistingHelp": "跳过已有片段的项目，避免重复请求；由 TheIntroDB 写入的片段到期后仍会刷新。",
+            "refreshAfterDays": "TheIntroDB 片段刷新间隔（天）",
+            "refreshAfterDaysHelp": "已有 TheIntroDB 片段的项目会在指定天数后重新查询，以获取修正后的标记。默认 30 天，设为 0 则不自动刷新。",
+            "fetchOnAdd": "新增媒体时自动获取片段",
+            "fetchOnAddHelp": "开启后，会在新增媒体的元数据下载完成后和开始播放时获取片段。已有片段按上方设置保留或刷新。",
+            "maxLookups": "单次扫描 API 查询上限",
+            "maxLookupsHelp": "限制单次扫描的查询次数。默认 400，设为 0 则任务不查询 API。大型媒体库可以适当提高，或再次运行扫描继续处理。",
+            "privacy": "隐私与日志",
+            "usageReporting": "发送匿名使用统计",
+            "usageReportingHelp": "开启后，插件可能收集匿名使用统计，用于改进插件。",
+            "fileLogging": "单独保存插件日志",
+            "fileLoggingHelp": "开启后，插件日志写入 data/theintrodb/theintrodb.log，而不是 Emby 主日志。",
+            "maintenance": "维护",
+            "repairHours": "标记修复间隔（小时）",
+            "repairHoursHelp": "定期检查已记录的片段，并恢复可能被 Emby 覆盖的标记，例如 Emby 为无内嵌章节的影片生成章节时。设为 0 可关闭自动修复。",
+            "repairTip": "提示：Emby 的「为没有内嵌章节的视频生成章节」可能覆盖插件标记。若遇到这个问题，可在「控制台 → 媒体库 → 编辑对应媒体库」中关闭该选项。",
+            "debug": "调试",
+            "internalId": "媒体内部 ID（InternalId）",
+            "internalIdHelp": "从本地数据库读取指定媒体的片段。",
+            "loadSegments": "读取片段",
+            "save": "保存",
+            "back": "返回",
+            "chooseLibraries": "选择媒体库",
+            "cancel": "取消",
+            "done": "完成",
+            "includeFolder": "包含整个媒体库",
+            "chooseLibraryHelp": "打开媒体库浏览其中的电影和剧集。可以选中整个媒体库，也可以逐部选择。",
+            "searchLibraries": "搜索媒体库",
+            "loadingLibraries": "正在加载媒体库…",
+            "apiStats": "API 密钥统计",
+            "close": "关闭",
+            "overviewBefore": "本插件通过",
+            "overviewAfter": "（v4），按媒体的 TVDB、TMDB 或 IMDb ID 获取片头、前情回顾、片尾和预告的时间点。建议优先使用 TVDB ID，尤其是采用 DVD 顺序或绝对集数的剧集。请运行「TheIntroDB Media Segment Scan」计划任务预先获取片段。",
+            "unknownItem": "未知项目",
+            "library": "媒体库",
+            "previousLibrary": "此前选中的媒体库",
+            "previousItem": "此前选中的项目",
+            "apiStatsButton": "查看 API 密钥统计",
+            "noStats": "暂无统计数据。",
+            "apiVerified": "API 密钥验证通过。",
+            "invalidToken": "API 密钥无效或已过期。",
+            "checkingKey": "正在验证 API 密钥…",
+            "validationUnavailable": "暂时无法验证 API 密钥。",
+            "excludeFolder": "不再包含整个媒体库",
+            "searchThisLibrary": "搜索当前媒体库",
+            "browseLibraryHelp": "可逐部选择电影和剧集，也可以包含整个媒体库。",
+            "browseLibrary": "请选择要浏览的媒体库。",
+            "noSupportedLibraries": "此用户没有可供选择的媒体库。",
+            "thisLibrary": "当前媒体库",
+            "noItems": "没有找到匹配的项目。",
+            "noLibraries": "没有找到匹配的媒体库。",
+            "folderIncluded": "已包含整个媒体库",
+            "openFolder": "打开媒体库",
+            "selectedShow": "已选中剧集",
+            "selectedMovie": "已选中电影",
+            "selectItem": "点击选择",
+            "loadingContents": "正在加载媒体库内容…",
+            "contentsFailed": "暂时无法加载媒体库内容。",
+            "librariesFailed": "暂时无法加载媒体库。",
+            "clearing": "正在清除…",
+            "clearFailed": "未能清除未命中缓存。",
+            "invalidInternalId": "请输入有效的媒体内部 ID。",
+            "segmentsFailed": "未能读取片段。",
+            "librariesSummary": "媒体库：{names}",
+            "manyLibraries": "已选 {count} 个媒体库：{names}…",
+            "manyItems": "已选 {count} 个项目：{names}…",
+            "showingContents": "正在显示「{library}」中的电影和剧集。",
+            "emptyContents": "「{library}」中没有可选的电影或剧集。",
+            "clearedEntries": "已清除 {count} 条未命中记录。运行「TheIntroDB Media Segment Scan」可重新查询媒体库。",
+            "stat_total": "总提交数",
+            "stat_accepted": "已通过",
+            "stat_pending": "待审核",
+            "stat_rejected": "未通过",
+            "stat_acceptance_rate": "通过率",
+            "stat_current_streak": "当前连续提交",
+            "stat_best_streak": "最长连续提交",
+            "stat_total_time_saved_ms": "累计节省时间",
+            "hours": "{value} 小时",
+            "minutes": "{value} 分",
+            "seconds": "{value} 秒"
+        }
+    };
+
     return function (view) {
+
+    function resolveLocale() {
+        let hostLocale;
+        try {
+            const host = globalize && (typeof globalize.getCurrentLocale === "function" ? globalize : globalize.default);
+            if (host && typeof host.getCurrentLocale === "function") hostLocale = host.getCurrentLocale();
+        } catch (error) { /* Older hosts may not expose a locale. */ }
+        const root = document.documentElement;
+        return [hostLocale, root.getAttribute("data-culture"), document.body && document.body.getAttribute("data-culture"), root.lang, navigator.language]
+            .find((candidate) => typeof candidate === "string" && candidate.trim()) || "";
+    }
+
+    const locale = resolveLocale().trim().toLowerCase().replace(/_/g, "-");
+    const language = /^(zh|zh-cn|zh-sg|zh-hans(?:-.*)?)$/.test(locale) ? "zh-CN" : "en";
+
+    function t(key, values) {
+        return (strings[language][key] || strings.en[key] || key).replace(/\{(\w+)\}/g, (match, name) =>
+            values && Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : match
+        );
+    }
+
+    view.querySelectorAll("[data-i18n]").forEach((element) => {
+        element.textContent = t(element.getAttribute("data-i18n"));
+    });
+
     var pluginUniqueId = "424b8e01-03d2-40a1-ba58-a2b9306f115d";
     var selectedShowIds = [];
     var selectedShowNames = [];
@@ -64,15 +320,15 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
     function getDisplayLabel(item) {
         if (!item) {
-            return "Unknown item";
+            return t("unknownItem");
         }
 
-        var name = item.Name || item.SortName || "Unknown item";
+        var name = item.Name || item.SortName || t("unknownItem");
         return item.ProductionYear ? name + " (" + item.ProductionYear + ")" : name;
     }
 
     function getLibraryDisplayLabel(item) {
-        return item && item.Name ? item.Name : "Library";
+        return item && item.Name ? item.Name : t("library");
     }
 
     function rememberLibraryItems(items) {
@@ -107,7 +363,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             if (!item) {
                 item = {
                     Id: id,
-                    Name: "Previously selected library",
+                    Name: t("previousLibrary"),
                     Type: "Library",
                 };
                 knownLibraryItems[normalizedId] = item;
@@ -125,7 +381,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             if (!item) {
                 item = {
                     Id: id,
-                    Name: "Previously selected item",
+                    Name: t("previousItem"),
                     Type: "Series",
                     ProductionYear: null,
                 };
@@ -157,9 +413,9 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
         if (selectedLibraryIds.length) {
             if (selectedLibraryNames.length <= 2) {
-                summaryParts.push("Libraries: " + selectedLibraryNames.join(", "));
+                summaryParts.push(t("librariesSummary", { names: selectedLibraryNames.join(", ") }));
             } else {
-                summaryParts.push(selectedLibraryIds.length + " libraries selected: " + selectedLibraryNames.slice(0, 2).join(", ") + ", ...");
+                summaryParts.push(t("manyLibraries", { count: selectedLibraryIds.length, names: selectedLibraryNames.slice(0, 2).join(", ") }));
             }
         }
 
@@ -167,11 +423,11 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             if (selectedShowNames.length <= 2) {
                 summaryParts.push(selectedShowNames.join(", "));
             } else {
-                summaryParts.push(selectedShowIds.length + " items selected: " + selectedShowNames.slice(0, 2).join(", ") + ", ...");
+                summaryParts.push(t("manyItems", { count: selectedShowIds.length, names: selectedShowNames.slice(0, 2).join(", ") }));
             }
         }
 
-        return summaryParts.length ? summaryParts.join(" | ") : "All media";
+        return summaryParts.length ? summaryParts.join(" | ") : t("allMedia");
     }
 
     function updateSelectedSummary() {
@@ -191,7 +447,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
         return {
             Id: id,
-            Name: item.Name || item.name || "Library",
+            Name: item.Name || item.name || t("library"),
             SortName: item.SortName || item.sortName || item.Name || item.name || "",
             CollectionType: (item.CollectionType || item.collectionType || "").toLowerCase(),
             Type: "Library",
@@ -262,14 +518,14 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             var timeParts = [];
 
             if (hours) {
-                timeParts.push(hours + "h");
+                timeParts.push(t("hours", { value: hours }));
             }
 
             if (minutes || hours) {
-                timeParts.push(minutes + "m");
+                timeParts.push(t("minutes", { value: minutes }));
             }
 
-            timeParts.push(seconds + "s");
+            timeParts.push(t("seconds", { value: seconds }));
             return timeParts.join(" ");
         }
 
@@ -277,7 +533,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
     }
 
     function getStatLabelText(label) {
-        return label.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+        return t("stat_" + label);
     }
 
     function renderApiValidationStatus(type, message, showInfoButton) {
@@ -314,7 +570,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             infoButton.type = "button";
             infoButton.className = "emby-button";
             infoButton.textContent = "i";
-            infoButton.title = "Show API key stats";
+            infoButton.title = t("apiStatsButton");
             infoButton.style.display = "inline-flex";
             infoButton.style.alignItems = "center";
             infoButton.style.justifyContent = "center";
@@ -339,7 +595,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         apiStatsContentElement.innerHTML = "";
 
         if (!stats) {
-            apiStatsContentElement.textContent = "No stats available.";
+            apiStatsContentElement.textContent = t("noStats");
             return;
         }
 
@@ -406,13 +662,13 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         }
 
         if (!forceRefresh && trimmedApiKey === lastValidatedApiKey) {
-            renderApiValidationStatus(lastValidatedApiKeyResult, lastValidatedApiKeyResult === "success" ? "API key verified." : "Invalid or expired token.", lastValidatedApiKeyResult === "success" && !!apiStats);
+            renderApiValidationStatus(lastValidatedApiKeyResult, lastValidatedApiKeyResult === "success" ? t("apiVerified") : t("invalidToken"), lastValidatedApiKeyResult === "success" && !!apiStats);
             return Promise.resolve();
         }
 
         apiValidationRequestId += 1;
         var requestId = apiValidationRequestId;
-        renderApiValidationStatus("loading", "Checking API key...", false);
+        renderApiValidationStatus("loading", t("checkingKey"), false);
 
         return postJson(ApiClient.getUrl("TheIntroDB/Validation/ApiKeyStats"), {
             apiKey: trimmedApiKey,
@@ -431,13 +687,13 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 if (isValid && stats) {
                     apiStats = stats;
                     lastValidatedApiKeyResult = "success";
-                    renderApiValidationStatus("success", "API key verified.", true);
+                    renderApiValidationStatus("success", t("apiVerified"), true);
                     return;
                 }
 
                 apiStats = null;
                 lastValidatedApiKeyResult = "error";
-                renderApiValidationStatus("error", validationError || "Invalid or expired token.", false);
+                renderApiValidationStatus("error", validationError || t("invalidToken"), false);
             })
             .catch((error) => {
                 if (requestId !== apiValidationRequestId) {
@@ -452,14 +708,14 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     apiStats = null;
                     lastValidatedApiKey = trimmedApiKey;
                     lastValidatedApiKeyResult = "error";
-                    renderApiValidationStatus("error", responseError || "Invalid or expired token.", false);
+                    renderApiValidationStatus("error", responseError || t("invalidToken"), false);
                     return;
                 }
 
                 apiStats = null;
                 lastValidatedApiKey = "";
                 lastValidatedApiKeyResult = "";
-                renderApiValidationStatus("error", "Could not validate API key right now.", false);
+                renderApiValidationStatus("error", t("validationUnavailable"), false);
             });
     }
 
@@ -581,22 +837,22 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         var browsingLibrary = getLibraryById(currentBrowseLibraryId);
         var isBrowsingLibrary = !!browsingLibrary;
 
-        showPickerTitleElement.textContent = isBrowsingLibrary ? getLibraryDisplayLabel(browsingLibrary) : "Choose Libraries";
+        showPickerTitleElement.textContent = isBrowsingLibrary ? getLibraryDisplayLabel(browsingLibrary) : t("chooseLibraries");
         showPickerBackButton.style.display = isBrowsingLibrary ? "inline-flex" : "none";
         showPickerWhitelistButton.style.display = isBrowsingLibrary ? "inline-flex" : "none";
-        showPickerWhitelistButton.textContent = isBrowsingLibrary && isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds) ? "Remove whole folder" : "Whitelist whole folder";
-        showPickerSearchLabelElement.textContent = isBrowsingLibrary ? "Search this library" : "Search libraries";
-        showPickerHintElement.textContent = isBrowsingLibrary ? "Movies and series can be selected individually, or you can whitelist the whole folder to include everything inside it." : "Open a library to browse its movies and shows. Inside a library, you can whitelist the whole folder or pick individual movies and shows.";
+        showPickerWhitelistButton.textContent = isBrowsingLibrary && isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds) ? t("excludeFolder") : t("includeFolder");
+        showPickerSearchLabelElement.textContent = isBrowsingLibrary ? t("searchThisLibrary") : t("searchLibraries");
+        showPickerHintElement.textContent = isBrowsingLibrary ? t("browseLibraryHelp") : t("chooseLibraryHelp");
     }
 
     function getPickerStatusText() {
         if (!currentBrowseLibraryId) {
-            return libraryItems.length ? "Choose a library to browse its contents." : "No supported libraries were returned for this user.";
+            return libraryItems.length ? t("browseLibrary") : t("noSupportedLibraries");
         }
 
         var libraryItem = getLibraryById(currentBrowseLibraryId);
-        var libraryName = libraryItem ? getLibraryDisplayLabel(libraryItem) : "this library";
-        return currentBrowseItems.length ? "Showing movies and series from " + libraryName + "." : "No movies or series were returned from " + libraryName + ".";
+        var libraryName = libraryItem ? getLibraryDisplayLabel(libraryItem) : t("thisLibrary");
+        return currentBrowseItems.length ? t("showingContents", { library: libraryName }) : t("emptyContents", { library: libraryName });
     }
 
     function renderPickerList(filterText) {
@@ -613,7 +869,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         showPickerListElement.style.display = "block";
 
         if (!matchingItems.length) {
-            showPickerListElement.textContent = currentBrowseLibraryId ? "No items found." : "No libraries found.";
+            showPickerListElement.textContent = currentBrowseLibraryId ? t("noItems") : t("noLibraries");
             return;
         }
 
@@ -624,7 +880,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
         if (!currentBrowseLibraryId) {
             matchingItems.forEach((item) => {
-                var card = createCardElement(item, getLibraryDisplayLabel(item), isIdSelected(item.Id, pickerSelectedLibraryIds) ? "Folder whitelisted" : "Open folder", isIdSelected(item.Id, pickerSelectedLibraryIds), true);
+                var card = createCardElement(item, getLibraryDisplayLabel(item), isIdSelected(item.Id, pickerSelectedLibraryIds) ? t("folderIncluded") : t("openFolder"), isIdSelected(item.Id, pickerSelectedLibraryIds), true);
 
                 card.addEventListener("click", () => {
                     openLibrary(item.Id);
@@ -639,7 +895,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         matchingItems.forEach((item) => {
             var itemSelected = isIdSelected(item.Id, pickerSelectedShowIds);
             var libraryWhitelisted = isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds);
-            var stateText = itemSelected ? (item.Type === "Series" ? "Selected show" : "Selected movie") : "Click to select";
+            var stateText = itemSelected ? (item.Type === "Series" ? t("selectedShow") : t("selectedMovie")) : t("selectItem");
 
             var card = createCardElement(item, getDisplayLabel(item), stateText, libraryWhitelisted || itemSelected, true);
 
@@ -826,7 +1082,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         currentBrowseLibraryId = libraryId || "";
         currentBrowseItems = [];
         renderPickerHeader();
-        showPickerStatusElement.textContent = "Loading library contents...";
+        showPickerStatusElement.textContent = t("loadingContents");
 
         loadLibraryContents(currentBrowseLibraryId)
             .then(() => {
@@ -835,7 +1091,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 renderPickerList(showPickerSearchElement.value || "");
             })
             .catch(() => {
-                showPickerStatusElement.textContent = "Could not load library contents right now.";
+                showPickerStatusElement.textContent = t("contentsFailed");
             });
     }
 
@@ -845,7 +1101,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         pickerSelectedLibraryIds = selectedLibraryIds.slice();
         pickerSelectedShowIds = selectedShowIds.slice();
         renderPickerHeader();
-        showPickerStatusElement.textContent = "Loading libraries...";
+        showPickerStatusElement.textContent = t("loadingLibraries");
 
         loadLibraries()
             .then(() => {
@@ -853,7 +1109,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 showPickerSearchElement.focus();
             })
             .catch(() => {
-                showPickerStatusElement.textContent = "Could not load libraries right now.";
+                showPickerStatusElement.textContent = t("librariesFailed");
                 showPickerSearchElement.focus();
             });
     }
@@ -928,13 +1184,13 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
     page.querySelector("#ClearNotFoundCache").addEventListener("click", () => {
         const statusElement = page.querySelector("#NotFoundCacheStatus");
-        statusElement.textContent = "Clearing...";
+        statusElement.textContent = t("clearing");
         postJson(ApiClient.getUrl("TheIntroDB/NotFoundCache/Clear"), {})
             .then((response) => {
-                statusElement.textContent = `Cleared ${response.ClearedEntries} cached not-found item(s). Run the Media segment scan to re-check your library.`;
+                statusElement.textContent = t("clearedEntries", { count: response.ClearedEntries });
             })
             .catch(() => {
-                statusElement.textContent = "Failed to clear the not-found cache.";
+                statusElement.textContent = t("clearFailed");
             });
     });
 
@@ -1005,7 +1261,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         apiStats = null;
         lastValidatedApiKey = "";
         lastValidatedApiKeyResult = "";
-        renderApiValidationStatus("loading", "Checking API key...", false);
+        renderApiValidationStatus("loading", t("checkingKey"), false);
         scheduleApiKeyValidation();
     });
 
@@ -1067,7 +1323,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             output.textContent = "";
             var internalId = parseInt((page.querySelector("#DebugInternalId").value || "").trim(), 10);
             if (!internalId) {
-                output.textContent = "Enter a valid InternalId.";
+                output.textContent = t("invalidInternalId");
                 return;
             }
 
@@ -1081,7 +1337,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     output.textContent = JSON.stringify(result, null, 2);
                 })
                 .catch((error) => {
-                    output.textContent = error && error.message ? error.message : "Failed to load segments.";
+                    output.textContent = error && error.message ? error.message : t("segmentsFailed");
                 })
                 .then(() => {
                     Dashboard.hideLoadingMsg();
