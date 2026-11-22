@@ -24,6 +24,8 @@
     <None Remove="Configuration\configPage.js" />
     <EmbeddedResource Include="Configuration\configPage.html" />
     <EmbeddedResource Include="Configuration\configPage.js" />
+    <None Remove="Configuration\locales\*.json" />
+    <EmbeddedResource Include="Configuration\locales\*.json" WithCulture="false" LogicalName="TheIntroDB.SettingsLocales.%(Filename)%(Extension)" />
     <EmbeddedResource Include="thumb.png" />
   </ItemGroup>
 

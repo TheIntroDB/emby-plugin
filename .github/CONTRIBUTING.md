@@ -57,6 +57,18 @@ dotnet build
 dotnet test
 ```
 
+### Settings page translations
+
+Settings strings live in `TheIntroDB/Configuration/locales/`. Use `en.json` as
+the reference for translation keys and keep placeholders such as `{count}`
+unchanged. Name a new file after its language or locale (for example, `fr.json`
+or `fr-CA.json`). Locale files are embedded automatically; missing translations
+fall back to English.
+
+Run `node --test tests/settings-localization.test.cjs` to check the UI
+translations, and `dotnet test` to verify packaged locale resolution.
+
+
 ## Pull Request Guidelines
 
 1. **Create a Branch**: Create a descriptive branch name for your changes (e.g., `feat/add-new-feature` or `fix/issue-description`).
