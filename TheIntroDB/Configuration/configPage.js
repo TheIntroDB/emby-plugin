@@ -15,7 +15,8 @@ define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_i
             .find((candidate) => typeof candidate === "string" && candidate.trim()) || "";
     }
 
-    let messages = Object.create(null);
+    // The build embeds the English dictionary so a failed request cannot expose keys.
+    let messages = Object.assign(Object.create(null), /* DEFAULT_LOCALE */ null);
 
     function t(key, values) {
         const message = typeof messages[key] === "string" ? messages[key] : key;
@@ -31,7 +32,7 @@ define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_i
             })))
             .then((translations) => {
                 if (!translations || typeof translations !== "object" || Array.isArray(translations)) return;
-                messages = Object.assign(Object.create(null), translations);
+                Object.assign(messages, translations);
                 view.querySelectorAll("[data-i18n]").forEach((element) => {
                     const key = element.getAttribute("data-i18n");
                     if (typeof messages[key] === "string") element.textContent = t(key);

@@ -6,7 +6,9 @@ const fs = require("node:fs");
 const test = require("node:test");
 const vm = require("node:vm");
 const html = fs.readFileSync("TheIntroDB/Configuration/configPage.html", "utf8");
-const js = fs.readFileSync("TheIntroDB/Configuration/configPage.js", "utf8");
+const englishJson = fs.readFileSync("TheIntroDB/Configuration/locales/en.json", "utf8");
+const js = fs.readFileSync("TheIntroDB/Configuration/configPage.js", "utf8")
+    .replace("/* DEFAULT_LOCALE */ null", () => englishJson);
 const keys = [...html.matchAll(/data-i18n="([^"]+)"/g)].map((match) => match[1]);
 
 async function setup({host, culture, lang = "", browser = "en-US", fail = false} = {}) {
@@ -83,6 +85,10 @@ test("failed locale requests leave original text and the settings controls avail
     const fixture = await setup({lang: "zh-CN", fail: true});
     assert.equal(fixture.messages.get("save").textContent, undefined);
     assert.equal(typeof fixture.get("#TheIntroDbConfigForm").events.submit, "function");
+    fixture.get("#ClearNotFoundCache").events.click();
+    assert.equal(fixture.get("#NotFoundCacheStatus").textContent, "Clearing...");
+    await new Promise(setImmediate);
+    assert.match(fixture.get("#NotFoundCacheStatus").textContent, /^Cleared 7 cached/);
 });
 
 test("locale resource keys and interpolation placeholders stay in sync", () => {
