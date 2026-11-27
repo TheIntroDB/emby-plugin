@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 TheIntroDB
 
-define(["emby-input", "emby-button", "emby-checkbox"], function (_input, _button, _checkbox) {
+define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_input, _button, _checkbox, globalize) {
     return function (view) {
+
+    function getGlobalize() {
+        if (globalize && typeof globalize.getCurrentLocale === "function") return globalize;
+        if (globalize && globalize.default && typeof globalize.default.getCurrentLocale === "function") return globalize.default;
+        if (typeof window !== "undefined" && window.Globalize && typeof window.Globalize.getCurrentLocale === "function") return window.Globalize;
+        return null;
+    }
 
     function resolveLocale() {
         let hostLocale;
         try {
-            const host = typeof window !== "undefined" ? window.Globalize : null;
-            if (host && typeof host.getCurrentLocale === "function") hostLocale = host.getCurrentLocale();
+            const host = getGlobalize();
+            if (host) hostLocale = host.getCurrentLocale();
         } catch (error) { /* Older hosts may not expose a locale. */ }
         const root = document.documentElement;
         return [hostLocale, root.getAttribute("data-culture"), document.body && document.body.getAttribute("data-culture"), root.lang, navigator.language]
@@ -915,13 +922,41 @@ define(["emby-input", "emby-button", "emby-checkbox"], function (_input, _button
         if (settingsLoad) return settingsLoad;
         settingsLoaded = false;
         saveButton.disabled = true;
-        settingsLoad = translationsReady.then(loadSettings).finally(() => { settingsLoad = null; });
+        // Load settings without waiting for translations: a slow locale request
+        // must never keep the page behind the loading spinner.
+        var load = Promise.resolve().then(loadSettings);
+        settingsLoad = load;
+        load.then(
+            () => { settingsLoad = null; },
+            () => { settingsLoad = null; }
+        );
         return settingsLoad;
+    }
+
+    function applyConfigToForm(config) {
+        page.querySelector("#EnableIntro").checked = config.EnableIntro !== false;
+        page.querySelector("#EnableRecap").checked = config.EnableRecap !== false;
+        page.querySelector("#EnableCredits").checked = config.EnableCredits !== false;
+        page.querySelector("#EnablePreview").checked = config.EnablePreview !== false;
+        page.querySelector("#EnableChapterCreation").checked = config.EnableChapterCreation !== false;
+        page.querySelector("#IgnoreMediaWithExistingSegments").checked = config.IgnoreMediaWithExistingSegments !== false;
+        page.querySelector("#RefreshAfterDays").value = config.RefreshAfterDays != null ? config.RefreshAfterDays : 30;
+        page.querySelector("#ProtectExistingIntroMarkers").checked = config.ProtectExistingIntroMarkers !== false;
+        page.querySelector("#ProtectExistingCreditsMarkers").checked = config.ProtectExistingCreditsMarkers !== false;
+        page.querySelector("#ReplaceExistingMarkers").checked = config.ReplaceExistingMarkers === true;
+        page.querySelector("#MaxLookupsPerRun").value = config.MaxLookupsPerRun != null ? config.MaxLookupsPerRun : 400;
+        page.querySelector("#EnableOnDemandFetch").checked = config.EnableOnDemandFetch !== false;
+        page.querySelector("#EnableAnonymousUsageReporting").checked = config.EnableAnonymousUsageReporting !== false;
+        page.querySelector("#EnableFileLogging").checked = config.EnableFileLogging === true;
+        page.querySelector("#MarkerRepairIntervalHours").value = config.MarkerRepairIntervalHours != null ? config.MarkerRepairIntervalHours : 12;
     }
 
     function loadSettings() {
         Dashboard.showLoadingMsg();
-        return ApiClient.getPluginConfiguration(pluginUniqueId)
+        // Safety net: never leave Emby's spinner up if a request stalls.
+        var hideLoadingTimer = setTimeout(() => Dashboard.hideLoadingMsg(), 15000);
+        return Promise.resolve()
+            .then(() => ApiClient.getPluginConfiguration(pluginUniqueId))
             .then((config) => {
                 var configuredShowIds = getSelectedShowIdsFromConfig(config);
                 var configuredLibraryIds = getSelectedLibraryIdsFromConfig(config);
@@ -930,50 +965,44 @@ define(["emby-input", "emby-button", "emby-checkbox"], function (_input, _button
                 resetApiValidationState();
                 setSelectedLibraries(ensureLibraryItemsForIds(configuredLibraryIds));
                 setSelectedShows(ensureShowItemsForIds(configuredShowIds));
+                applyConfigToForm(config);
 
                 return getCurrentUserId()
+                    .catch(() => "")
                     .then((userId) => {
                         currentUserId = userId || "";
-                        if (!currentUserId) {
-                            return;
+
+                        settingsLoaded = true;
+                        saveButton.disabled = false;
+                        clearTimeout(hideLoadingTimer);
+                        Dashboard.hideLoadingMsg();
+
+                        // Resolving display names for selected libraries and items can
+                        // be slow on large libraries. It is cosmetic, so keep it off
+                        // the critical path instead of holding the page open.
+                        if (currentUserId) {
+                            Promise.resolve()
+                                .then(() => loadLibraries().then(() => {
+                                    setSelectedLibraries(ensureLibraryItemsForIds(configuredLibraryIds));
+                                    return loadAllShowReferences(configuredShowIds).then(() => {
+                                        setSelectedShows(ensureShowItemsForIds(configuredShowIds));
+                                    });
+                                }))
+                                .catch(() => { /* Keep the fallback labels. */ });
                         }
 
-                        return loadLibraries().then(() => {
-                            setSelectedLibraries(ensureLibraryItemsForIds(configuredLibraryIds));
-                            return loadAllShowReferences(configuredShowIds).then(() => {
-                                setSelectedShows(ensureShowItemsForIds(configuredShowIds));
-                            });
-                        });
-                    })
-                    .then(() => {
-                        page.querySelector("#EnableIntro").checked = config.EnableIntro !== false;
-                        page.querySelector("#EnableRecap").checked = config.EnableRecap !== false;
-                        page.querySelector("#EnableCredits").checked = config.EnableCredits !== false;
-                        page.querySelector("#EnablePreview").checked = config.EnablePreview !== false;
-                        page.querySelector("#EnableChapterCreation").checked = config.EnableChapterCreation !== false;
-                        page.querySelector("#IgnoreMediaWithExistingSegments").checked = config.IgnoreMediaWithExistingSegments !== false;
-                        page.querySelector("#RefreshAfterDays").value = config.RefreshAfterDays != null ? config.RefreshAfterDays : 30;
-                        page.querySelector("#ProtectExistingIntroMarkers").checked = config.ProtectExistingIntroMarkers !== false;
-                        page.querySelector("#ProtectExistingCreditsMarkers").checked = config.ProtectExistingCreditsMarkers !== false;
-                        page.querySelector("#ReplaceExistingMarkers").checked = config.ReplaceExistingMarkers === true;
-                        page.querySelector("#MaxLookupsPerRun").value = config.MaxLookupsPerRun != null ? config.MaxLookupsPerRun : 400;
-                        page.querySelector("#EnableOnDemandFetch").checked = config.EnableOnDemandFetch !== false;
-                        page.querySelector("#EnableAnonymousUsageReporting").checked = config.EnableAnonymousUsageReporting !== false;
-                        page.querySelector("#EnableFileLogging").checked = config.EnableFileLogging === true;
-                        page.querySelector("#MarkerRepairIntervalHours").value = config.MarkerRepairIntervalHours != null ? config.MarkerRepairIntervalHours : 12;
+                        // Validating the key calls the external TheIntroDB API. Never
+                        // let it keep the settings page behind the loading spinner.
                         if (apiKeyInput.value) {
-                            return validateApiKey(apiKeyInput.value, true);
+                            Promise.resolve()
+                                .then(() => validateApiKey(apiKeyInput.value, true))
+                                .catch(() => { /* The status area reports validation failures. */ });
                         }
                     });
             })
-            .then(() => {
-                Dashboard.hideLoadingMsg();
-            })
-            .then(() => {
-                settingsLoaded = true;
-                saveButton.disabled = false;
-            })
             .catch(() => {
+                // Leave Save disabled when the settings could not be read.
+                clearTimeout(hideLoadingTimer);
                 Dashboard.hideLoadingMsg();
             });
     }

@@ -3,15 +3,29 @@
   <UsingTask TaskName="EmbedDefaultSettingsLocale" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <SourceFile ParameterType="System.String" Required="true" />
-      <LocaleFile ParameterType="System.String" Required="true" />
+      <LocaleDirectory ParameterType="System.String" Required="true" />
       <OutputFile ParameterType="System.String" Required="true" />
     </ParameterGroup>
     <Task>
       <Using Namespace="System.IO" />
       <Code Type="Fragment" Language="cs"><![CDATA[
         var source = File.ReadAllText(SourceFile);
-        var locale = File.ReadAllText(LocaleFile).TrimEnd();
-        var generated = source.Replace("/* DEFAULT_LOCALE */ null", locale);
+        var localeFiles = Directory.GetFiles(LocaleDirectory, "*.json");
+        System.Array.Sort(localeFiles, System.StringComparer.OrdinalIgnoreCase);
+
+        var locales = new System.Text.StringBuilder();
+        locales.Append("{");
+        foreach (var file in localeFiles)
+        {
+            var name = Path.GetFileNameWithoutExtension(file);
+            locales.Append("\"").Append(name.Replace("\\", "\\\\").Replace("\"", "\\\"")).Append("\":");
+            locales.Append(File.ReadAllText(file).Trim());
+            locales.Append(",");
+        }
+        if (localeFiles.Length > 0) locales.Length -= 1;
+        locales.Append("}");
+
+        var generated = source.Replace("/* EMBEDDED_LOCALES */ null", locales.ToString());
         var directory = Path.GetDirectoryName(OutputFile);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
         if (!File.Exists(OutputFile) || File.ReadAllText(OutputFile) != generated)

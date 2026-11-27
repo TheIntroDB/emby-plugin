@@ -11,7 +11,7 @@ const js = fs.readFileSync("TheIntroDB/Configuration/configPage.js", "utf8")
     .replace("/* DEFAULT_LOCALE */ null", () => englishJson);
 const keys = [...html.matchAll(/data-i18n="([^"]+)"/g)].map((match) => match[1]);
 
-async function setup({host, culture, lang = "", browser = "en-US", fail = false, readSettings, readLibraries, apiStats, controllerSource = js} = {}) {
+async function setup({host, culture, lang = "", browser = "en-US", fail = false, readSettings, readLibraries, apiStats, hangValidation = false, controllerSource = js} = {}) {
     const nodes = new Map();
     function node() {
         return { style: {}, events: {}, children: [], value: "", textContent: "",
@@ -29,13 +29,19 @@ async function setup({host, culture, lang = "", browser = "en-US", fail = false,
     let requestedLocale;
     const pageEvents = {};
     const saves = [];
+    const loading = { shown: 0, hidden: 0 };
     vm.runInNewContext(controllerSource, {
-        define(_deps, factory) { controller = factory(null, null, null); },
-        window: { Globalize: host },
+        define(_deps, factory) { controller = factory(null, null, null, host); },
+        window: {},
         document: { createElement: node, documentElement: { lang, getAttribute() { return culture; } } },
         navigator: { language: browser },
         setTimeout() {},
-        Dashboard: { showLoadingMsg() {}, hideLoadingMsg() {}, processPluginConfigurationUpdateResult() {} },
+        clearTimeout() {},
+        Dashboard: {
+            showLoadingMsg() { loading.shown += 1; },
+            hideLoadingMsg() { loading.hidden += 1; },
+            processPluginConfigurationUpdateResult() {},
+        },
         ApiClient: {
             getPluginConfiguration: readSettings,
             getCurrentUserId: () => readLibraries ? "test-user" : "",
@@ -52,8 +58,9 @@ async function setup({host, culture, lang = "", browser = "en-US", fail = false,
                     return Promise.resolve(JSON.parse(fs.readFileSync("TheIntroDB/Configuration/locales/" + filename + ".json", "utf8")));
                 }
                 if (readLibraries && request.url === "Users/test-user/Views") return readLibraries();
-                if (apiStats && request.url === "TheIntroDB/Validation/ApiKeyStats") {
-                    return Promise.resolve({isValid: true, stats: apiStats});
+                if (request.url === "TheIntroDB/Validation/ApiKeyStats") {
+                    if (hangValidation) return new Promise(() => {});
+                    if (apiStats) return Promise.resolve({isValid: true, stats: apiStats});
                 }
                 clearUrl = request.url;
                 return Promise.resolve({ ClearedEntries: 7 });
@@ -62,7 +69,7 @@ async function setup({host, culture, lang = "", browser = "en-US", fail = false,
     });
     controller({querySelector: get, querySelectorAll: () => [...messages.values()], addEventListener(event, handler) { pageEvents[event] = handler; }});
     await new Promise(setImmediate);
-    return {messages, get, requestedLocale, pageEvents, saves, get clearUrl() { return clearUrl; }};
+    return {messages, get, requestedLocale, pageEvents, saves, loading, get clearUrl() { return clearUrl; }};
 }
 
 test("Emby locale overrides the browser, and all localized HTML keys resolve", async () => {
@@ -79,6 +86,7 @@ test("Emby locale overrides the browser, and all localized HTML keys resolve", a
     assert.match(html, /href="https:\/\/theintrodb\.org"/);
 });
 test("culture, document and browser fallbacks, with unsupported locales remaining English", async () => {
+    assert.equal((await setup({host:{default:{getCurrentLocale:() => "zh-CN"}}})).messages.get("save").textContent, "保存");
     assert.equal((await setup({host:{getCurrentLocale(){throw Error("unavailable");}}, culture:"zh-Hans-CN"})).messages.get("save").textContent, "保存");
     assert.equal((await setup({lang:"zh-CN"})).messages.get("save").textContent, "保存");
     assert.equal((await setup({browser:"zh-CN"})).messages.get("save").textContent, "保存");
@@ -124,6 +132,7 @@ test("Statistics use a translated label or the original readable fallback", asyn
         controllerSource: js.replace('["total", "accepted", "pending"', '["cache_hits", "total", "accepted", "pending"'),
     });
     await fixture.pageEvents.pageshow();
+    await new Promise(setImmediate);
     const infoButton = fixture.get("#ApiKeyValidationStatus").children.find((child) => child.events.click);
     infoButton.events.click({preventDefault() {}});
     const grid = fixture.get("#ApiStatsContent").children.at(-1);
@@ -140,15 +149,16 @@ function trySave(fixture) {
     assert.ok(prevented);
 }
 
-test("Save is disabled before loading and waits for the full form before submitting", async () => {
+test("Save is disabled before loading and waits for the form before submitting", async () => {
     assert.match(html, /<button\b[^>]*type="submit"[^>]*\bdisabled\b/);
     let readCount = 0;
-    let finishLibraries;
-    const libraries = new Promise((resolve) => { finishLibraries = resolve; });
+    let finishSettings;
+    const settings = new Promise((resolve) => { finishSettings = resolve; });
     const original = {EnableRecap: false, RefreshAfterDays: 45, MaxLookupsPerRun: 750, MarkerRepairIntervalHours: 20};
     const fixture = await setup({
-        readSettings: () => { readCount += 1; return Promise.resolve({...original}); },
-        readLibraries: () => libraries,
+        readSettings: () => { readCount += 1; return settings; },
+        // Library enrichment must not block the form.
+        readLibraries: () => new Promise(() => {}),
     });
     const button = fixture.get(submitSelector);
     trySave(fixture);
@@ -160,7 +170,7 @@ test("Save is disabled before loading and waits for the full form before submitt
     trySave(fixture);
     assert.equal(readCount, 1);
     assert.deepEqual(fixture.saves, []);
-    finishLibraries({Items: []});
+    finishSettings({...original});
     await load;
     assert.equal(button.disabled, false);
     trySave(fixture);
@@ -169,11 +179,24 @@ test("Save is disabled before loading and waits for the full form before submitt
     for (const [key, value] of Object.entries(original)) assert.equal(fixture.saves[0][key], value, key);
 });
 
+test("Slow library enrichment and API key validation do not hold the page open", async () => {
+    const fixture = await setup({
+        readSettings: () => Promise.resolve({ApiKey: "test-key"}),
+        readLibraries: () => new Promise(() => {}),
+        hangValidation: true,
+    });
+    await fixture.pageEvents.pageshow();
+    assert.equal(fixture.get(submitSelector).disabled, false);
+    assert.ok(fixture.loading.hidden >= 1);
+});
+
 test("Failed settings loads leave Save blocked until a later successful load", async () => {
     let shouldFail = true;
     const fixture = await setup({
-        readSettings: () => Promise.resolve({RefreshAfterDays: 42}),
-        readLibraries: () => shouldFail ? Promise.reject(new Error("offline")) : Promise.resolve({Items: []}),
+        readSettings: () => shouldFail
+            ? Promise.reject(new Error("offline"))
+            : Promise.resolve({RefreshAfterDays: 42}),
+        readLibraries: () => Promise.resolve({Items: []}),
     });
     await fixture.pageEvents.pageshow();
     assert.equal(fixture.get(submitSelector).disabled, true);
