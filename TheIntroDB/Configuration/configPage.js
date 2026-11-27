@@ -317,7 +317,9 @@ define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_i
     }
 
     function getStatLabelText(label) {
-        return t("stat_" + label);
+        const key = "stat_" + label;
+        const translated = t(key);
+        return translated !== key ? translated : label.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
     }
 
     function renderApiValidationStatus(type, message, showInfoButton) {

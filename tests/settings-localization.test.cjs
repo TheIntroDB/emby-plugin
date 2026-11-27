@@ -11,10 +11,11 @@ const js = fs.readFileSync("TheIntroDB/Configuration/configPage.js", "utf8")
     .replace("/* DEFAULT_LOCALE */ null", () => englishJson);
 const keys = [...html.matchAll(/data-i18n="([^"]+)"/g)].map((match) => match[1]);
 
-async function setup({host, culture, lang = "", browser = "en-US", fail = false, readSettings, readLibraries} = {}) {
+async function setup({host, culture, lang = "", browser = "en-US", fail = false, readSettings, readLibraries, apiStats, controllerSource = js} = {}) {
     const nodes = new Map();
     function node() {
-        return { style: {}, events: {}, value: "", textContent: "",
+        return { style: {}, events: {}, children: [], value: "", textContent: "",
+            appendChild(child) { this.children.push(child); },
             addEventListener(event, handler) { this.events[event] = handler; },
             querySelector: get, querySelectorAll() { return []; } };
     }
@@ -28,9 +29,9 @@ async function setup({host, culture, lang = "", browser = "en-US", fail = false,
     let requestedLocale;
     const pageEvents = {};
     const saves = [];
-    vm.runInNewContext(js, {
+    vm.runInNewContext(controllerSource, {
         define(_deps, factory) { controller = factory(null, null, null, host); },
-        document: { documentElement: { lang, getAttribute() { return culture; } } },
+        document: { createElement: node, documentElement: { lang, getAttribute() { return culture; } } },
         navigator: { language: browser },
         setTimeout() {},
         Dashboard: { showLoadingMsg() {}, hideLoadingMsg() {}, processPluginConfigurationUpdateResult() {} },
@@ -50,6 +51,9 @@ async function setup({host, culture, lang = "", browser = "en-US", fail = false,
                     return Promise.resolve(JSON.parse(fs.readFileSync("TheIntroDB/Configuration/locales/" + filename + ".json", "utf8")));
                 }
                 if (readLibraries && request.url === "Users/test-user/Views") return readLibraries();
+                if (apiStats && request.url === "TheIntroDB/Validation/ApiKeyStats") {
+                    return Promise.resolve({isValid: true, stats: apiStats});
+                }
                 clearUrl = request.url;
                 return Promise.resolve({ ClearedEntries: 7 });
             }
@@ -108,6 +112,23 @@ test("locale resource keys and interpolation placeholders stay in sync", () => {
         assert.deepEqual(placeholders(cn[key]), placeholders(en[key]), key);
         assert.ok(en[key].trim() && cn[key].trim(), key);
     }
+});
+
+test("Statistics use a translated label or the original readable fallback", async () => {
+    const expectedChineseLabel = JSON.parse(fs.readFileSync("TheIntroDB/Configuration/locales/zh-CN.json", "utf8")).stat_total;
+    const fixture = await setup({
+        lang: "zh-CN", readSettings: () => Promise.resolve({ApiKey: "test-key"}),
+        apiStats: {total: 12, cache_hits: 3},
+        // Simulate an added statistic before its translation is contributed.
+        controllerSource: js.replace('["total", "accepted", "pending"', '["cache_hits", "total", "accepted", "pending"'),
+    });
+    await fixture.pageEvents.pageshow();
+    const infoButton = fixture.get("#ApiKeyValidationStatus").children.find((child) => child.events.click);
+    infoButton.events.click({preventDefault() {}});
+    const grid = fixture.get("#ApiStatsContent").children.at(-1);
+    const labels = grid.children.map((card) => card.children[0].textContent);
+    assert.ok(labels.includes(expectedChineseLabel));
+    assert.ok(labels.includes("Cache Hits"));
 });
 
 const submitSelector = 'button[type="submit"]';
