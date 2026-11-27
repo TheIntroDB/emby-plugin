@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 TheIntroDB
 
-define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_input, _button, _checkbox, globalize) {
+define(["emby-input", "emby-button", "emby-checkbox"], function (_input, _button, _checkbox) {
     return function (view) {
 
     function resolveLocale() {
         let hostLocale;
         try {
-            const host = globalize && (typeof globalize.getCurrentLocale === "function" ? globalize : globalize.default);
+            const host = typeof window !== "undefined" ? window.Globalize : null;
             if (host && typeof host.getCurrentLocale === "function") hostLocale = host.getCurrentLocale();
         } catch (error) { /* Older hosts may not expose a locale. */ }
         const root = document.documentElement;

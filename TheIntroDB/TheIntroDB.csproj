@@ -1,5 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <UsingTask TaskName="EmbedDefaultSettingsLocale" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SourceFile ParameterType="System.String" Required="true" />
+      <LocaleFile ParameterType="System.String" Required="true" />
+      <OutputFile ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var source = File.ReadAllText(SourceFile);
+        var locale = File.ReadAllText(LocaleFile).TrimEnd();
+        var generated = source.Replace("/* DEFAULT_LOCALE */ null", locale);
+        var directory = Path.GetDirectoryName(OutputFile);
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+        if (!File.Exists(OutputFile) || File.ReadAllText(OutputFile) != generated)
+        {
+            File.WriteAllText(OutputFile, generated, new System.Text.UTF8Encoding(false));
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>TheIntroDB</RootNamespace>
@@ -32,13 +54,11 @@
     <InternalsVisibleTo Include="TheIntroDB.Tests" />
   </ItemGroup>
 
-  <Target Name="EmbedDefaultSettingsLocale" BeforeTargets="AssignTargetPaths">
-    <PropertyGroup>
-      <_SettingsPageSource>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/Configuration/configPage.js'))</_SettingsPageSource>
-      <_DefaultSettingsLocale>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/Configuration/locales/en.json'))</_DefaultSettingsLocale>
-      <_SettingsPageSource>$(_SettingsPageSource.Replace('/* DEFAULT_LOCALE */ null', '$(_DefaultSettingsLocale)'))</_SettingsPageSource>
-    </PropertyGroup>
-    <WriteLinesToFile File="$(IntermediateOutputPath)configPage.js" Lines="$([MSBuild]::Escape('$(_SettingsPageSource)'))" Encoding="UTF-8" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  <Target Name="GenerateSettingsPageScript" BeforeTargets="AssignTargetPaths">
+    <EmbedDefaultSettingsLocale
+      SourceFile="$(MSBuildProjectDirectory)/Configuration/configPage.js"
+      LocaleFile="$(MSBuildProjectDirectory)/Configuration/locales/en.json"
+      OutputFile="$(MSBuildProjectDirectory)/$(IntermediateOutputPath)configPage.js" />
     <ItemGroup>
       <EmbeddedResource Include="$(IntermediateOutputPath)configPage.js" LogicalName="TheIntroDB.Configuration.configPage.js" />
     </ItemGroup>

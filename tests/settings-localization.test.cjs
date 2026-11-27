@@ -30,7 +30,8 @@ async function setup({host, culture, lang = "", browser = "en-US", fail = false,
     const pageEvents = {};
     const saves = [];
     vm.runInNewContext(controllerSource, {
-        define(_deps, factory) { controller = factory(null, null, null, host); },
+        define(_deps, factory) { controller = factory(null, null, null); },
+        window: { Globalize: host },
         document: { createElement: node, documentElement: { lang, getAttribute() { return culture; } } },
         navigator: { language: browser },
         setTimeout() {},
