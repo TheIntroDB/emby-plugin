@@ -1,8 +1,48 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 TheIntroDB
 
-define(["emby-input", "emby-button", "emby-checkbox"], function () {
+define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_input, _button, _checkbox, globalize) {
     return function (view) {
+
+    function resolveLocale() {
+        let hostLocale;
+        try {
+            const host = globalize && (typeof globalize.getCurrentLocale === "function" ? globalize : globalize.default);
+            if (host && typeof host.getCurrentLocale === "function") hostLocale = host.getCurrentLocale();
+        } catch (error) { /* Older hosts may not expose a locale. */ }
+        const root = document.documentElement;
+        return [hostLocale, root.getAttribute("data-culture"), document.body && document.body.getAttribute("data-culture"), root.lang, navigator.language]
+            .find((candidate) => typeof candidate === "string" && candidate.trim()) || "";
+    }
+
+    // The build embeds the English dictionary so a failed request cannot expose keys.
+    let messages = Object.assign(Object.create(null), /* DEFAULT_LOCALE */ null);
+
+    function t(key, values) {
+        const message = typeof messages[key] === "string" ? messages[key] : key;
+        return message.replace(/\{(\w+)\}/g, (match, name) =>
+            values && Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : match
+        );
+    }
+
+    function loadTranslations() {
+        return Promise.resolve()
+            .then(() => getJson(ApiClient.getUrl("TheIntroDB/Settings/Translations", {
+                Locale: resolveLocale().trim(),
+            })))
+            .then((translations) => {
+                if (!translations || typeof translations !== "object" || Array.isArray(translations)) return;
+                Object.assign(messages, translations);
+                view.querySelectorAll("[data-i18n]").forEach((element) => {
+                    const key = element.getAttribute("data-i18n");
+                    if (typeof messages[key] === "string") element.textContent = t(key);
+                });
+            })
+            .catch(() => { /* Keep the settings usable if translations cannot load. */ });
+    }
+
+    const translationsReady = loadTranslations();
+
     var pluginUniqueId = "424b8e01-03d2-40a1-ba58-a2b9306f115d";
     var selectedShowIds = [];
     var selectedShowNames = [];
@@ -64,15 +104,15 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
     function getDisplayLabel(item) {
         if (!item) {
-            return "Unknown item";
+            return t("unknownItem");
         }
 
-        var name = item.Name || item.SortName || "Unknown item";
+        var name = item.Name || item.SortName || t("unknownItem");
         return item.ProductionYear ? name + " (" + item.ProductionYear + ")" : name;
     }
 
     function getLibraryDisplayLabel(item) {
-        return item && item.Name ? item.Name : "Library";
+        return item && item.Name ? item.Name : t("library");
     }
 
     function rememberLibraryItems(items) {
@@ -107,7 +147,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             if (!item) {
                 item = {
                     Id: id,
-                    Name: "Previously selected library",
+                    Name: t("previousLibrary"),
                     Type: "Library",
                 };
                 knownLibraryItems[normalizedId] = item;
@@ -125,7 +165,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             if (!item) {
                 item = {
                     Id: id,
-                    Name: "Previously selected item",
+                    Name: t("previousItem"),
                     Type: "Series",
                     ProductionYear: null,
                 };
@@ -157,9 +197,9 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
         if (selectedLibraryIds.length) {
             if (selectedLibraryNames.length <= 2) {
-                summaryParts.push("Libraries: " + selectedLibraryNames.join(", "));
+                summaryParts.push(t("librariesSummary", { names: selectedLibraryNames.join(", ") }));
             } else {
-                summaryParts.push(selectedLibraryIds.length + " libraries selected: " + selectedLibraryNames.slice(0, 2).join(", ") + ", ...");
+                summaryParts.push(t("manyLibraries", { count: selectedLibraryIds.length, names: selectedLibraryNames.slice(0, 2).join(", ") }));
             }
         }
 
@@ -167,11 +207,11 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             if (selectedShowNames.length <= 2) {
                 summaryParts.push(selectedShowNames.join(", "));
             } else {
-                summaryParts.push(selectedShowIds.length + " items selected: " + selectedShowNames.slice(0, 2).join(", ") + ", ...");
+                summaryParts.push(t("manyItems", { count: selectedShowIds.length, names: selectedShowNames.slice(0, 2).join(", ") }));
             }
         }
 
-        return summaryParts.length ? summaryParts.join(" | ") : "All media";
+        return summaryParts.length ? summaryParts.join(" | ") : t("allMedia");
     }
 
     function updateSelectedSummary() {
@@ -191,7 +231,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
         return {
             Id: id,
-            Name: item.Name || item.name || "Library",
+            Name: item.Name || item.name || t("library"),
             SortName: item.SortName || item.sortName || item.Name || item.name || "",
             CollectionType: (item.CollectionType || item.collectionType || "").toLowerCase(),
             Type: "Library",
@@ -262,14 +302,14 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             var timeParts = [];
 
             if (hours) {
-                timeParts.push(hours + "h");
+                timeParts.push(t("hours", { value: hours }));
             }
 
             if (minutes || hours) {
-                timeParts.push(minutes + "m");
+                timeParts.push(t("minutes", { value: minutes }));
             }
 
-            timeParts.push(seconds + "s");
+            timeParts.push(t("seconds", { value: seconds }));
             return timeParts.join(" ");
         }
 
@@ -277,7 +317,9 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
     }
 
     function getStatLabelText(label) {
-        return label.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+        const key = "stat_" + label;
+        const translated = t(key);
+        return translated !== key ? translated : label.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
     }
 
     function renderApiValidationStatus(type, message, showInfoButton) {
@@ -314,7 +356,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             infoButton.type = "button";
             infoButton.className = "emby-button";
             infoButton.textContent = "i";
-            infoButton.title = "Show API key stats";
+            infoButton.title = t("apiStatsButton");
             infoButton.style.display = "inline-flex";
             infoButton.style.alignItems = "center";
             infoButton.style.justifyContent = "center";
@@ -339,7 +381,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         apiStatsContentElement.innerHTML = "";
 
         if (!stats) {
-            apiStatsContentElement.textContent = "No stats available.";
+            apiStatsContentElement.textContent = t("noStats");
             return;
         }
 
@@ -406,13 +448,13 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         }
 
         if (!forceRefresh && trimmedApiKey === lastValidatedApiKey) {
-            renderApiValidationStatus(lastValidatedApiKeyResult, lastValidatedApiKeyResult === "success" ? "API key verified." : "Invalid or expired token.", lastValidatedApiKeyResult === "success" && !!apiStats);
+            renderApiValidationStatus(lastValidatedApiKeyResult, lastValidatedApiKeyResult === "success" ? t("apiVerified") : t("invalidToken"), lastValidatedApiKeyResult === "success" && !!apiStats);
             return Promise.resolve();
         }
 
         apiValidationRequestId += 1;
         var requestId = apiValidationRequestId;
-        renderApiValidationStatus("loading", "Checking API key...", false);
+        renderApiValidationStatus("loading", t("checkingKey"), false);
 
         return postJson(ApiClient.getUrl("TheIntroDB/Validation/ApiKeyStats"), {
             apiKey: trimmedApiKey,
@@ -431,13 +473,13 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 if (isValid && stats) {
                     apiStats = stats;
                     lastValidatedApiKeyResult = "success";
-                    renderApiValidationStatus("success", "API key verified.", true);
+                    renderApiValidationStatus("success", t("apiVerified"), true);
                     return;
                 }
 
                 apiStats = null;
                 lastValidatedApiKeyResult = "error";
-                renderApiValidationStatus("error", validationError || "Invalid or expired token.", false);
+                renderApiValidationStatus("error", validationError || t("invalidToken"), false);
             })
             .catch((error) => {
                 if (requestId !== apiValidationRequestId) {
@@ -452,14 +494,14 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     apiStats = null;
                     lastValidatedApiKey = trimmedApiKey;
                     lastValidatedApiKeyResult = "error";
-                    renderApiValidationStatus("error", responseError || "Invalid or expired token.", false);
+                    renderApiValidationStatus("error", responseError || t("invalidToken"), false);
                     return;
                 }
 
                 apiStats = null;
                 lastValidatedApiKey = "";
                 lastValidatedApiKeyResult = "";
-                renderApiValidationStatus("error", "Could not validate API key right now.", false);
+                renderApiValidationStatus("error", t("validationUnavailable"), false);
             });
     }
 
@@ -581,22 +623,22 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         var browsingLibrary = getLibraryById(currentBrowseLibraryId);
         var isBrowsingLibrary = !!browsingLibrary;
 
-        showPickerTitleElement.textContent = isBrowsingLibrary ? getLibraryDisplayLabel(browsingLibrary) : "Choose Libraries";
+        showPickerTitleElement.textContent = isBrowsingLibrary ? getLibraryDisplayLabel(browsingLibrary) : t("chooseLibraries");
         showPickerBackButton.style.display = isBrowsingLibrary ? "inline-flex" : "none";
         showPickerWhitelistButton.style.display = isBrowsingLibrary ? "inline-flex" : "none";
-        showPickerWhitelistButton.textContent = isBrowsingLibrary && isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds) ? "Remove whole folder" : "Whitelist whole folder";
-        showPickerSearchLabelElement.textContent = isBrowsingLibrary ? "Search this library" : "Search libraries";
-        showPickerHintElement.textContent = isBrowsingLibrary ? "Movies and series can be selected individually, or you can whitelist the whole folder to include everything inside it." : "Open a library to browse its movies and shows. Inside a library, you can whitelist the whole folder or pick individual movies and shows.";
+        showPickerWhitelistButton.textContent = isBrowsingLibrary && isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds) ? t("excludeFolder") : t("includeFolder");
+        showPickerSearchLabelElement.textContent = isBrowsingLibrary ? t("searchThisLibrary") : t("searchLibraries");
+        showPickerHintElement.textContent = isBrowsingLibrary ? t("browseLibraryHelp") : t("chooseLibraryHelp");
     }
 
     function getPickerStatusText() {
         if (!currentBrowseLibraryId) {
-            return libraryItems.length ? "Choose a library to browse its contents." : "No supported libraries were returned for this user.";
+            return libraryItems.length ? t("browseLibrary") : t("noSupportedLibraries");
         }
 
         var libraryItem = getLibraryById(currentBrowseLibraryId);
-        var libraryName = libraryItem ? getLibraryDisplayLabel(libraryItem) : "this library";
-        return currentBrowseItems.length ? "Showing movies and series from " + libraryName + "." : "No movies or series were returned from " + libraryName + ".";
+        var libraryName = libraryItem ? getLibraryDisplayLabel(libraryItem) : t("thisLibrary");
+        return currentBrowseItems.length ? t("showingContents", { library: libraryName }) : t("emptyContents", { library: libraryName });
     }
 
     function renderPickerList(filterText) {
@@ -613,7 +655,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         showPickerListElement.style.display = "block";
 
         if (!matchingItems.length) {
-            showPickerListElement.textContent = currentBrowseLibraryId ? "No items found." : "No libraries found.";
+            showPickerListElement.textContent = currentBrowseLibraryId ? t("noItems") : t("noLibraries");
             return;
         }
 
@@ -624,7 +666,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
         if (!currentBrowseLibraryId) {
             matchingItems.forEach((item) => {
-                var card = createCardElement(item, getLibraryDisplayLabel(item), isIdSelected(item.Id, pickerSelectedLibraryIds) ? "Folder whitelisted" : "Open folder", isIdSelected(item.Id, pickerSelectedLibraryIds), true);
+                var card = createCardElement(item, getLibraryDisplayLabel(item), isIdSelected(item.Id, pickerSelectedLibraryIds) ? t("folderIncluded") : t("openFolder"), isIdSelected(item.Id, pickerSelectedLibraryIds), true);
 
                 card.addEventListener("click", () => {
                     openLibrary(item.Id);
@@ -639,7 +681,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         matchingItems.forEach((item) => {
             var itemSelected = isIdSelected(item.Id, pickerSelectedShowIds);
             var libraryWhitelisted = isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds);
-            var stateText = itemSelected ? (item.Type === "Series" ? "Selected show" : "Selected movie") : "Click to select";
+            var stateText = itemSelected ? (item.Type === "Series" ? t("selectedShow") : t("selectedMovie")) : t("selectItem");
 
             var card = createCardElement(item, getDisplayLabel(item), stateText, libraryWhitelisted || itemSelected, true);
 
@@ -826,7 +868,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         currentBrowseLibraryId = libraryId || "";
         currentBrowseItems = [];
         renderPickerHeader();
-        showPickerStatusElement.textContent = "Loading library contents...";
+        showPickerStatusElement.textContent = t("loadingContents");
 
         loadLibraryContents(currentBrowseLibraryId)
             .then(() => {
@@ -835,7 +877,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 renderPickerList(showPickerSearchElement.value || "");
             })
             .catch(() => {
-                showPickerStatusElement.textContent = "Could not load library contents right now.";
+                showPickerStatusElement.textContent = t("contentsFailed");
             });
     }
 
@@ -845,7 +887,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         pickerSelectedLibraryIds = selectedLibraryIds.slice();
         pickerSelectedShowIds = selectedShowIds.slice();
         renderPickerHeader();
-        showPickerStatusElement.textContent = "Loading libraries...";
+        showPickerStatusElement.textContent = t("loadingLibraries");
 
         loadLibraries()
             .then(() => {
@@ -853,7 +895,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 showPickerSearchElement.focus();
             })
             .catch(() => {
-                showPickerStatusElement.textContent = "Could not load libraries right now.";
+                showPickerStatusElement.textContent = t("librariesFailed");
                 showPickerSearchElement.focus();
             });
     }
@@ -863,9 +905,23 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         showLibraryRoot();
     }
 
+    const settingsForm = page.querySelector("#TheIntroDbConfigForm");
+    const saveButton = settingsForm.querySelector('button[type="submit"]');
+    let settingsLoaded = false;
+    let settingsLoad;
+
     function loadConfigPage() {
+        // Multiple page-show hooks can fire for the same load.
+        if (settingsLoad) return settingsLoad;
+        settingsLoaded = false;
+        saveButton.disabled = true;
+        settingsLoad = translationsReady.then(loadSettings).finally(() => { settingsLoad = null; });
+        return settingsLoad;
+    }
+
+    function loadSettings() {
         Dashboard.showLoadingMsg();
-        ApiClient.getPluginConfiguration(pluginUniqueId)
+        return ApiClient.getPluginConfiguration(pluginUniqueId)
             .then((config) => {
                 var configuredShowIds = getSelectedShowIdsFromConfig(config);
                 var configuredLibraryIds = getSelectedLibraryIdsFromConfig(config);
@@ -913,6 +969,10 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             .then(() => {
                 Dashboard.hideLoadingMsg();
             })
+            .then(() => {
+                settingsLoaded = true;
+                saveButton.disabled = false;
+            })
             .catch(() => {
                 Dashboard.hideLoadingMsg();
             });
@@ -928,13 +988,13 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
     page.querySelector("#ClearNotFoundCache").addEventListener("click", () => {
         const statusElement = page.querySelector("#NotFoundCacheStatus");
-        statusElement.textContent = "Clearing...";
+        statusElement.textContent = t("clearing");
         postJson(ApiClient.getUrl("TheIntroDB/NotFoundCache/Clear"), {})
             .then((response) => {
-                statusElement.textContent = `Cleared ${response.ClearedEntries} cached not-found item(s). Run the Media segment scan to re-check your library.`;
+                statusElement.textContent = t("clearedEntries", { count: response.ClearedEntries });
             })
             .catch(() => {
-                statusElement.textContent = "Failed to clear the not-found cache.";
+                statusElement.textContent = t("clearFailed");
             });
     });
 
@@ -1005,7 +1065,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         apiStats = null;
         lastValidatedApiKey = "";
         lastValidatedApiKeyResult = "";
-        renderApiValidationStatus("loading", "Checking API key...", false);
+        renderApiValidationStatus("loading", t("checkingKey"), false);
         scheduleApiKeyValidation();
     });
 
@@ -1018,8 +1078,9 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         validateApiKey(apiKeyInput.value, false);
     });
 
-    page.querySelector("#TheIntroDbConfigForm").addEventListener("submit", (e) => {
+    settingsForm.addEventListener("submit", (e) => {
         e.preventDefault();
+        if (!settingsLoaded) return false;
         Dashboard.showLoadingMsg();
         ApiClient.getPluginConfiguration(pluginUniqueId)
             .then((config) => {
@@ -1067,7 +1128,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
             output.textContent = "";
             var internalId = parseInt((page.querySelector("#DebugInternalId").value || "").trim(), 10);
             if (!internalId) {
-                output.textContent = "Enter a valid InternalId.";
+                output.textContent = t("invalidInternalId");
                 return;
             }
 
@@ -1081,7 +1142,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     output.textContent = JSON.stringify(result, null, 2);
                 })
                 .catch((error) => {
-                    output.textContent = error && error.message ? error.message : "Failed to load segments.";
+                    output.textContent = error && error.message ? error.message : t("segmentsFailed");
                 })
                 .then(() => {
                     Dashboard.hideLoadingMsg();
@@ -1092,7 +1153,9 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
         });
     }
 
-    updateSelectedSummary();
-    showLibraryRoot();
+    translationsReady.then(() => {
+        updateSelectedSummary();
+        if (showPickerOverlay.style.display !== "flex") showLibraryRoot();
+    });
     };
 });

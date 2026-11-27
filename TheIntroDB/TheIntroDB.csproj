@@ -23,12 +23,25 @@
     <None Remove="Configuration\configPage.html" />
     <None Remove="Configuration\configPage.js" />
     <EmbeddedResource Include="Configuration\configPage.html" />
-    <EmbeddedResource Include="Configuration\configPage.js" />
+    <None Remove="Configuration\locales\*.json" />
+    <EmbeddedResource Include="Configuration\locales\*.json" WithCulture="false" LogicalName="TheIntroDB.SettingsLocales.%(Filename)%(Extension)" />
     <EmbeddedResource Include="thumb.png" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="TheIntroDB.Tests" />
   </ItemGroup>
+
+  <Target Name="EmbedDefaultSettingsLocale" BeforeTargets="AssignTargetPaths">
+    <PropertyGroup>
+      <_SettingsPageSource>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/Configuration/configPage.js'))</_SettingsPageSource>
+      <_DefaultSettingsLocale>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/Configuration/locales/en.json'))</_DefaultSettingsLocale>
+      <_SettingsPageSource>$(_SettingsPageSource.Replace('/* DEFAULT_LOCALE */ null', '$(_DefaultSettingsLocale)'))</_SettingsPageSource>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)configPage.js" Lines="$([MSBuild]::Escape('$(_SettingsPageSource)'))" Encoding="UTF-8" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)configPage.js" LogicalName="TheIntroDB.Configuration.configPage.js" />
+    </ItemGroup>
+  </Target>
 
 </Project>
