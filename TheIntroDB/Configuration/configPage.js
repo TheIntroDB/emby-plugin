@@ -903,13 +903,23 @@ define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_i
         showLibraryRoot();
     }
 
+    const settingsForm = page.querySelector("#TheIntroDbConfigForm");
+    const saveButton = settingsForm.querySelector('button[type="submit"]');
+    let settingsLoaded = false;
+    let settingsLoad;
+
     function loadConfigPage() {
-        return translationsReady.then(loadSettings);
+        // Multiple page-show hooks can fire for the same load.
+        if (settingsLoad) return settingsLoad;
+        settingsLoaded = false;
+        saveButton.disabled = true;
+        settingsLoad = translationsReady.then(loadSettings).finally(() => { settingsLoad = null; });
+        return settingsLoad;
     }
 
     function loadSettings() {
         Dashboard.showLoadingMsg();
-        ApiClient.getPluginConfiguration(pluginUniqueId)
+        return ApiClient.getPluginConfiguration(pluginUniqueId)
             .then((config) => {
                 var configuredShowIds = getSelectedShowIdsFromConfig(config);
                 var configuredLibraryIds = getSelectedLibraryIdsFromConfig(config);
@@ -956,6 +966,10 @@ define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_i
             })
             .then(() => {
                 Dashboard.hideLoadingMsg();
+            })
+            .then(() => {
+                settingsLoaded = true;
+                saveButton.disabled = false;
             })
             .catch(() => {
                 Dashboard.hideLoadingMsg();
@@ -1062,8 +1076,9 @@ define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_i
         validateApiKey(apiKeyInput.value, false);
     });
 
-    page.querySelector("#TheIntroDbConfigForm").addEventListener("submit", (e) => {
+    settingsForm.addEventListener("submit", (e) => {
         e.preventDefault();
+        if (!settingsLoaded) return false;
         Dashboard.showLoadingMsg();
         ApiClient.getPluginConfiguration(pluginUniqueId)
             .then((config) => {
