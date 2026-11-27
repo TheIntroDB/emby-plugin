@@ -102,12 +102,12 @@ namespace TheIntroDB.Tests
                 // this to five minutes would turn an exhausted daily budget into
                 // a probe loop (the 429-every-five-minutes behaviour).
                 response.Headers.Add("X-UsageLimit-Reset", "49000");
-                Assert.Equal(49000, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
+                Assert.Equal(49000, Assert.IsType<int>(method.Invoke(null, new object?[] { response.Headers, null })));
 
                 // Sanity bound: never wait longer than a day for the daily bucket.
                 response.Headers.Clear();
                 response.Headers.Add("X-UsageLimit-Reset", "999999");
-                Assert.Equal(86400, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
+                Assert.Equal(86400, Assert.IsType<int>(method.Invoke(null, new object?[] { response.Headers, null })));
             }
         }
 
@@ -123,7 +123,7 @@ namespace TheIntroDB.Tests
             {
                 // A broken/huge rate-limit reset must never disable lookups for days.
                 response.Headers.Add("X-RateLimit-Reset", "999999");
-                Assert.Equal(300, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
+                Assert.Equal(300, Assert.IsType<int>(method.Invoke(null, new object?[] { response.Headers, null })));
             }
         }
 
@@ -139,7 +139,7 @@ namespace TheIntroDB.Tests
             {
                 // Fiber's limiter answers rate-limit 429s with Retry-After only.
                 response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(10));
-                Assert.Equal(10, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
+                Assert.Equal(10, Assert.IsType<int>(method.Invoke(null, new object?[] { response.Headers, null })));
             }
         }
 
@@ -153,7 +153,7 @@ namespace TheIntroDB.Tests
 
             using (var response = new HttpResponseMessage())
             {
-                Assert.Equal(300, Assert.IsType<int>(method.Invoke(null, new object[] { response.Headers, null })));
+                Assert.Equal(300, Assert.IsType<int>(method.Invoke(null, new object?[] { response.Headers, null })));
             }
         }
 
