@@ -33,23 +33,29 @@ public sealed class SettingsLocalizationTests
         Assert.True(messages.Count > 100);
     }
     [Fact]
-    public void BuildsEmbeddedSettingsScriptWithEnglishDictionary()
+    public void BuildsEmbeddedSettingsScriptWithLocaleDictionaries()
     {
         using var scriptStream = typeof(SettingsLocalizationService).Assembly
             .GetManifestResourceStream("TheIntroDB.Configuration.configPage.js");
         Assert.NotNull(scriptStream);
         using var reader = new StreamReader(scriptStream);
         var script = reader.ReadToEnd();
-        const string prefix = "let messages = Object.assign(Object.create(null), ";
+        const string prefix = "const embeddedLocales = ";
         var begin = script.IndexOf(prefix, System.StringComparison.Ordinal);
         Assert.True(begin >= 0);
         begin += prefix.Length;
-        var end = script.IndexOf("\n}", begin, System.StringComparison.Ordinal);
+        var end = script.IndexOf("};", begin, System.StringComparison.Ordinal);
         Assert.True(end > begin);
-        var embedded = JsonSerializer.Deserialize<Dictionary<string, string>>(script.Substring(begin, end - begin + 2));
-        var original = Assert.IsType<Dictionary<string, string>>(new SettingsLocalizationService().Get(
-            new SettingsLocalizationService.GetTranslations { Locale = "en" }));
+        var embedded = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(
+            script.Substring(begin, end - begin + 1));
         Assert.NotNull(embedded);
-        Assert.Equal<Dictionary<string, string>>(original, embedded);
+
+        var english = Assert.IsType<Dictionary<string, string>>(new SettingsLocalizationService().Get(
+            new SettingsLocalizationService.GetTranslations { Locale = "en" }));
+        var simplifiedChinese = Assert.IsType<Dictionary<string, string>>(new SettingsLocalizationService().Get(
+            new SettingsLocalizationService.GetTranslations { Locale = "zh-CN" }));
+
+        Assert.Equal(english, embedded["en"]);
+        Assert.Equal(simplifiedChinese, embedded["zh-CN"]);
     }
 }

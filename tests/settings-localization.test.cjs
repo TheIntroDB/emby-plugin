@@ -7,8 +7,9 @@ const test = require("node:test");
 const vm = require("node:vm");
 const html = fs.readFileSync("TheIntroDB/Configuration/configPage.html", "utf8");
 const englishJson = fs.readFileSync("TheIntroDB/Configuration/locales/en.json", "utf8");
+const chineseJson = fs.readFileSync("TheIntroDB/Configuration/locales/zh-CN.json", "utf8");
 const js = fs.readFileSync("TheIntroDB/Configuration/configPage.js", "utf8")
-    .replace("/* DEFAULT_LOCALE */ null", () => englishJson);
+    .replace("/* EMBEDDED_LOCALES */ null", () => `{"en":${englishJson},"zh-CN":${chineseJson}}`);
 const keys = [...html.matchAll(/data-i18n="([^"]+)"/g)].map((match) => match[1]);
 
 async function setup({host, culture, lang = "", browser = "en-US", fail = false, readSettings, readLibraries, apiStats, hangValidation = false, controllerSource = js} = {}) {
@@ -101,14 +102,14 @@ test("localized dynamic message preserves the original cache API route and count
     assert.match(fixture.get("#NotFoundCacheStatus").textContent, /已清除 7 条/);
 });
 
-test("failed locale requests leave original text and the settings controls available", async () => {
+test("failed locale requests fall back to the embedded locale and keep the settings controls available", async () => {
     const fixture = await setup({lang: "zh-CN", fail: true});
-    assert.equal(fixture.messages.get("save").textContent, undefined);
+    assert.equal(fixture.messages.get("save").textContent, "保存");
     assert.equal(typeof fixture.get("#TheIntroDbConfigForm").events.submit, "function");
     fixture.get("#ClearNotFoundCache").events.click();
-    assert.equal(fixture.get("#NotFoundCacheStatus").textContent, "Clearing...");
+    assert.equal(fixture.get("#NotFoundCacheStatus").textContent, "正在清除…");
     await new Promise(setImmediate);
-    assert.match(fixture.get("#NotFoundCacheStatus").textContent, /^Cleared 7 cached/);
+    assert.match(fixture.get("#NotFoundCacheStatus").textContent, /^已清除 7 条/);
 });
 
 test("locale resource keys and interpolation placeholders stay in sync", () => {

@@ -22,8 +22,48 @@ define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_i
             .find((candidate) => typeof candidate === "string" && candidate.trim()) || "";
     }
 
-    // The build embeds the English dictionary so a failed request cannot expose keys.
-    let messages = Object.assign(Object.create(null), /* DEFAULT_LOCALE */ null);
+    // The build embeds every locale dictionary so a failed request cannot expose raw keys.
+    const embeddedLocales = /* EMBEDDED_LOCALES */ null;
+
+    // Pick the embedded locale that matches the host, mirroring the server's
+    // SettingsLocalizationService so the offline fallback matches the endpoint.
+    function embeddedLocaleFor(locale) {
+        const names = Object.create(null);
+        if (embeddedLocales && typeof embeddedLocales === "object" && !Array.isArray(embeddedLocales)) {
+            Object.keys(embeddedLocales).forEach((name) => { names[String(name).toLowerCase()] = name; });
+        }
+        const value = String(locale || "").trim().replace(/_/g, "-").toLowerCase();
+        if (!value) return "en";
+        const separator = value.indexOf("-");
+        const language = separator > 0 ? value.substring(0, separator) : value;
+        const simplifiedChinese = /^zh(-sg|-hans(-.*)?)?$/.test(value);
+        if (names[value]) return names[value];
+        if (simplifiedChinese && names["zh-cn"]) return names["zh-cn"];
+        if (names[language]) return names[language];
+        return "en";
+    }
+
+    function embeddedMessages() {
+        if (!embeddedLocales || typeof embeddedLocales !== "object" || Array.isArray(embeddedLocales)) {
+            return Object.create(null);
+        }
+        const base = Object.assign(Object.create(null), embeddedLocales["en"] || {});
+        const selected = embeddedLocaleFor(resolveLocale());
+        if (selected && selected !== "en" && embeddedLocales[selected]) {
+            return Object.assign(base, embeddedLocales[selected]);
+        }
+        return base;
+    }
+
+    // Falls back to the embedded dictionary so a failed request cannot expose raw keys.
+    let messages = embeddedMessages();
+
+    function applyStaticTranslations() {
+        view.querySelectorAll("[data-i18n]").forEach((element) => {
+            const key = element.getAttribute("data-i18n");
+            if (typeof messages[key] === "string") element.textContent = t(key);
+        });
+    }
 
     function t(key, values) {
         const message = typeof messages[key] === "string" ? messages[key] : key;
@@ -40,15 +80,15 @@ define(["emby-input", "emby-button", "emby-checkbox", "globalize"], function (_i
             .then((translations) => {
                 if (!translations || typeof translations !== "object" || Array.isArray(translations)) return;
                 Object.assign(messages, translations);
-                view.querySelectorAll("[data-i18n]").forEach((element) => {
-                    const key = element.getAttribute("data-i18n");
-                    if (typeof messages[key] === "string") element.textContent = t(key);
-                });
+                applyStaticTranslations();
             })
             .catch(() => { /* Keep the settings usable if translations cannot load. */ });
     }
 
     const translationsReady = loadTranslations();
+    // Localize from the embedded dictionary right away so the page is translated
+    // even if the translations request is slow or unavailable.
+    applyStaticTranslations();
 
     var pluginUniqueId = "424b8e01-03d2-40a1-ba58-a2b9306f115d";
     var selectedShowIds = [];

@@ -71,7 +71,7 @@
   <Target Name="GenerateSettingsPageScript" BeforeTargets="AssignTargetPaths">
     <EmbedDefaultSettingsLocale
       SourceFile="$(MSBuildProjectDirectory)/Configuration/configPage.js"
-      LocaleFile="$(MSBuildProjectDirectory)/Configuration/locales/en.json"
+      LocaleDirectory="$(MSBuildProjectDirectory)/Configuration/locales"
       OutputFile="$(MSBuildProjectDirectory)/$(IntermediateOutputPath)configPage.js" />
     <ItemGroup>
       <EmbeddedResource Include="$(IntermediateOutputPath)configPage.js" LogicalName="TheIntroDB.Configuration.configPage.js" />
